@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect, useState } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Center, Environment } from '@react-three/drei'
 import * as THREE from 'three'
@@ -227,24 +227,42 @@ async function parse3MF(buffer: ArrayBuffer): Promise<THREE.BufferGeometry> {
     }
   }
 
-  // Also check for embedded STL files (BambuStudio format)
-  const stlFiles = files.filter(f => f.toLowerCase().endsWith('.stl'))
+  // Check for embedded STL files in multiple locations (BambuStudio/PrusaSlicer compatibility)
+  const stlPatterns = [
+    /\.stl$/i,                    // Any .stl file
+    /Metadata\/.*\.stl$/i,        // Metadata folder
+    /3D\/Objects\/.*\.stl$/i,     // 3D/Objects folder (PrusaSlicer)
+    /3D\/.*\.stl$/i               // Any STL in 3D folder
+  ]
+
+  const stlFiles = files.filter(f => {
+    if (f.toLowerCase().endsWith('.model')) return false
+    return stlPatterns.some(pattern => pattern.test(f))
+  })
+
   for (const stlFile of stlFiles) {
-    const stlData = await zip.file(stlFile)!.async('arraybuffer')
-    const stlGeometry = parseStl(stlData)
+    try {
+      const fileContent = zip.file(stlFile)
+      if (!fileContent) continue
 
-    const positions = stlGeometry.getAttribute('position')
-    const normals = stlGeometry.getAttribute('normal')
+      const stlData = await fileContent.async('arraybuffer')
+      const stlGeometry = parseStl(stlData)
 
-    if (positions) {
-      for (let i = 0; i < positions.count; i++) {
-        allVertices.push(positions.getX(i), positions.getY(i), positions.getZ(i))
+      const positions = stlGeometry.getAttribute('position')
+      const normals = stlGeometry.getAttribute('normal')
+
+      if (positions) {
+        for (let i = 0; i < positions.count; i++) {
+          allVertices.push(positions.getX(i), positions.getY(i), positions.getZ(i))
+        }
       }
-    }
-    if (normals) {
-      for (let i = 0; i < normals.count; i++) {
-        allNormals.push(normals.getX(i), normals.getY(i), normals.getZ(i))
+      if (normals) {
+        for (let i = 0; i < normals.count; i++) {
+          allNormals.push(normals.getX(i), normals.getY(i), normals.getZ(i))
+        }
       }
+    } catch (e) {
+      console.log(`Failed to parse embedded STL: ${stlFile}`, e)
     }
   }
 

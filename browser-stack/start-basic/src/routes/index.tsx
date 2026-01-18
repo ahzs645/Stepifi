@@ -36,6 +36,24 @@ function StatsColumn({ title, stats, color }: { title: string; stats: MeshStats;
             <span className="text-gray-200 font-mono">{formatNumber(stats.faceCount)}</span>
           </div>
         )}
+        {stats.triangleCount !== undefined && stats.triangleCount > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Triangles:</span>
+            <span className="text-gray-200 font-mono">{formatNumber(stats.triangleCount)}</span>
+          </div>
+        )}
+        {stats.edgeCount !== undefined && stats.edgeCount > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Edges:</span>
+            <span className="text-gray-200 font-mono">{formatNumber(stats.edgeCount)}</span>
+          </div>
+        )}
+        {stats.vertexCount !== undefined && stats.vertexCount > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Vertices:</span>
+            <span className="text-gray-200 font-mono">{formatNumber(stats.vertexCount)}</span>
+          </div>
+        )}
         {stats.surfaceArea !== undefined && stats.surfaceArea > 0 && (
           <div className="flex justify-between">
             <span className="text-gray-500">Surface:</span>
@@ -56,7 +74,33 @@ function StatsColumn({ title, stats, color }: { title: string; stats: MeshStats;
             </span>
           </div>
         )}
+        {stats.isSolid !== undefined && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500">Solid:</span>
+            <span className={`text-xs px-2 py-0.5 rounded ${stats.isSolid ? 'bg-green-900/50 text-green-400' : 'bg-yellow-900/50 text-yellow-400'}`}>
+              {stats.isSolid ? 'Yes' : 'No'}
+            </span>
+          </div>
+        )}
+        {stats.isWatertight !== undefined && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500">Watertight:</span>
+            <span className={`text-xs px-2 py-0.5 rounded ${stats.isWatertight ? 'bg-green-900/50 text-green-400' : 'bg-yellow-900/50 text-yellow-400'}`}>
+              {stats.isWatertight ? 'Yes' : 'No'}
+            </span>
+          </div>
+        )}
       </div>
+      {stats.qualityIssues && stats.qualityIssues.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-700">
+          <p className="text-xs text-yellow-500 font-medium mb-1">Warnings:</p>
+          <ul className="text-xs text-yellow-400/80 space-y-1">
+            {stats.qualityIssues.map((issue, i) => (
+              <li key={i}>• {issue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
@@ -70,6 +114,7 @@ function Home() {
   const [isDragging, setIsDragging] = useState(false)
   const [beforeStats, setBeforeStats] = useState<MeshStats | null>(null)
   const [afterStats, setAfterStats] = useState<MeshStats | null>(null)
+  const [repairs, setRepairs] = useState<string[]>([])
 
   // Conversion options
   const [outputFormat, setOutputFormat] = useState<'step' | 'stl'>('step')
@@ -134,6 +179,7 @@ function Home() {
     setProgress('Loading OpenCascade.js (~9MB)...')
     setBeforeStats(null)
     setAfterStats(null)
+    setRepairs([])
 
     try {
       const { convertFile } = await import('~/lib/converter')
@@ -155,15 +201,17 @@ function Home() {
         (msg) => setProgress(msg),
         (stats) => setBeforeStats(stats),
         (stats) => setAfterStats(stats),
+        (repairLog) => setRepairs(repairLog),
       )
 
       const mimeType = conversionResult.format === 'step' ? 'application/step' : 'model/stl'
       const blob = new Blob([new Uint8Array(conversionResult.data).buffer as ArrayBuffer], { type: mimeType })
       const baseName = fileName.replace(/\.(stl|3mf)$/i, '')
 
-      // Update stats from result if available
+      // Update stats and repairs from result if available
       if (conversionResult.beforeStats) setBeforeStats(conversionResult.beforeStats)
       if (conversionResult.afterStats) setAfterStats(conversionResult.afterStats)
+      if (conversionResult.repairs) setRepairs(conversionResult.repairs)
 
       setResult({
         blob,
@@ -284,6 +332,23 @@ function Home() {
               {afterStats && (
                 <StatsColumn title="After (Output)" stats={afterStats} color="green" />
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Repair Operations Log */}
+        {repairs.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-sm font-semibold text-gray-400 mb-3">Repair Operations</h3>
+            <div className="p-4 rounded-lg border border-purple-600 bg-purple-900/20">
+              <ul className="text-sm text-gray-300 space-y-1">
+                {repairs.map((repair, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-purple-400 mt-0.5">✓</span>
+                    <span>{repair}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         )}
@@ -423,6 +488,7 @@ function Home() {
                 setResult(null)
                 setBeforeStats(null)
                 setAfterStats(null)
+                setRepairs([])
               }}
               className="w-full mt-2 py-3 px-6 text-sm font-medium text-gray-400 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
             >

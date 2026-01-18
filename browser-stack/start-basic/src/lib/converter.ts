@@ -25,6 +25,9 @@ export interface ConversionOptions {
 
 export interface MeshStats {
   faceCount?: number
+  edgeCount?: number
+  vertexCount?: number
+  triangleCount?: number
   boundingBox?: {
     min: { x: number; y: number; z: number }
     max: { x: number; y: number; z: number }
@@ -32,6 +35,9 @@ export interface MeshStats {
   }
   volume?: number
   surfaceArea?: number
+  isSolid?: boolean
+  isWatertight?: boolean
+  qualityIssues?: string[]
   note?: string
 }
 
@@ -40,6 +46,7 @@ export interface ConversionResult {
   format: 'step' | 'stl'
   beforeStats?: MeshStats
   afterStats?: MeshStats
+  repairs?: string[]
 }
 
 export function convertFile(
@@ -49,6 +56,7 @@ export function convertFile(
   onProgress?: (message: string) => void,
   onBeforeStats?: (stats: MeshStats) => void,
   onAfterStats?: (stats: MeshStats) => void,
+  onRepairLog?: (repairs: string[]) => void,
 ): Promise<ConversionResult> {
   return new Promise((resolve, reject) => {
     const w = getWorker()
@@ -62,9 +70,10 @@ export function convertFile(
 
     let beforeStats: MeshStats | undefined
     let afterStats: MeshStats | undefined
+    let repairs: string[] = []
 
     w.onmessage = (e: MessageEvent) => {
-      const { type, data, message, format } = e.data
+      const { type, data, message } = e.data
 
       switch (type) {
         case 'progress':
@@ -79,12 +88,17 @@ export function convertFile(
           afterStats = data
           onAfterStats?.(data)
           break
+        case 'repairLog':
+          repairs = data
+          onRepairLog?.(data)
+          break
         case 'complete':
           resolve({
             data: e.data.data,
             format: e.data.format,
             beforeStats: e.data.beforeStats || beforeStats,
             afterStats: e.data.afterStats || afterStats,
+            repairs: e.data.repairs || repairs,
           })
           break
         case 'error':

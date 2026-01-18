@@ -1,9 +1,14 @@
 /**
  * Web Worker for OpenCascade.js v2 STL/3MF to STEP/STL conversion
- * Features: mesh repair, face merging, multi-mesh support, tolerance control
+ * Features: mesh repair, face merging, multi-mesh support, tolerance control,
+ *           large mesh optimization, JavaScript mesh repairs, fallback strategies
  */
 
 let ocInstance = null
+
+// Thresholds for large mesh optimization
+const LARGE_MESH_THRESHOLD = 50000      // Skip expensive operations above this
+const VERY_LARGE_MESH_THRESHOLD = 100000 // Skip face merging above this
 
 async function initOpenCascade() {
   self.postMessage({ type: 'progress', message: 'Fetching OpenCascade.js...' })
@@ -85,14 +90,72 @@ async function parse3MF(arrayBuffer) {
     }
   }
 
-  // Also check for external object files (BambuStudio format)
-  const objectFiles = files.filter(f =>
-    f.toLowerCase().endsWith('.stl') || f.match(/Metadata\/.*\.stl/i)
-  )
+  // Check for embedded STL files in multiple locations (BambuStudio/PrusaSlicer compatibility)
+  const stlPatterns = [
+    /\.stl$/i,                    // Any .stl file
+    /Metadata\/.*\.stl$/i,        // Metadata folder (some slicers)
+    /3D\/Objects\/.*\.stl$/i,     // 3D/Objects folder (PrusaSlicer)
+    /3D\/.*\.stl$/i               // Any STL in 3D folder
+  ]
+
+  const objectFiles = files.filter(f => {
+    // Skip already processed model files
+    if (f.toLowerCase().endsWith('.model')) return false
+    // Check if matches any STL pattern
+    return stlPatterns.some(pattern => pattern.test(f))
+  })
 
   for (const objFile of objectFiles) {
-    const stlData = await zip.file(objFile).async('arraybuffer')
-    meshes.push({ stlData: new Uint8Array(stlData), isStl: true })
+    try {
+      const fileContent = zip.file(objFile)
+      if (fileContent) {
+        const stlData = await fileContent.async('arraybuffer')
+        meshes.push({ stlData: new Uint8Array(stlData), isStl: true, source: objFile })
+      }
+    } catch (e) {
+      console.log(`Failed to read embedded STL: ${objFile}`, e.message)
+    }
+  }
+
+  // Check for component references in model XML
+  if (modelPath) {
+    const modelXml = await zip.file(modelPath).async('text')
+
+    // Look for component references like <component objectid="2" ... />
+    const componentRegex = /<component\s+[^>]*objectid=["'](\d+)["'][^>]*>/gi
+    let componentMatch
+    const referencedObjects = new Set()
+
+    while ((componentMatch = componentRegex.exec(modelXml)) !== null) {
+      referencedObjects.add(componentMatch[1])
+    }
+
+    // Find and parse referenced object definitions
+    for (const objId of referencedObjects) {
+      const objRegex = new RegExp(`<object\\s+id=["']${objId}["'][^>]*>([\\s\\S]*?)<\\/object>`, 'gi')
+      let objMatch = objRegex.exec(modelXml)
+
+      if (objMatch) {
+        const objContent = objMatch[1]
+        // Check if this object has a mesh (already parsed above)
+        if (!objContent.includes('<mesh')) {
+          // Check if it references an external file via path attribute
+          const pathMatch = objContent.match(/path=["']([^"']+)["']/i)
+          if (pathMatch) {
+            const refPath = pathMatch[1]
+            const fullPath = files.find(f => f.endsWith(refPath) || f.includes(refPath))
+            if (fullPath && !objectFiles.includes(fullPath)) {
+              try {
+                const stlData = await zip.file(fullPath).async('arraybuffer')
+                meshes.push({ stlData: new Uint8Array(stlData), isStl: true, source: fullPath })
+              } catch (e) {
+                console.log(`Failed to read referenced file: ${fullPath}`, e.message)
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   if (meshes.length === 0) {
@@ -168,13 +231,18 @@ function meshToStl(mesh) {
 /**
  * Analyze mesh and return statistics
  */
-function analyzeMesh(oc, shape) {
+function analyzeMesh(oc, shape, originalTriangleCount = 0) {
   const stats = {
-    triangleCount: 0,
+    triangleCount: originalTriangleCount,
     vertexCount: 0,
+    edgeCount: 0,
+    faceCount: 0,
     boundingBox: null,
     volume: 0,
-    surfaceArea: 0
+    surfaceArea: 0,
+    isSolid: false,
+    isWatertight: false,
+    qualityIssues: []
   }
 
   try {
@@ -197,19 +265,63 @@ function analyzeMesh(oc, shape) {
       }
     }
 
-    // Count faces and get surface area
+    // Count faces
     const faceExplorer = new oc.TopExp_Explorer_2(
       shape,
       oc.TopAbs_ShapeEnum.TopAbs_FACE,
       oc.TopAbs_ShapeEnum.TopAbs_SHAPE
     )
-
     let faceCount = 0
     while (faceExplorer.More()) {
       faceCount++
       faceExplorer.Next()
     }
     stats.faceCount = faceCount
+
+    // Count edges
+    const edgeExplorer = new oc.TopExp_Explorer_2(
+      shape,
+      oc.TopAbs_ShapeEnum.TopAbs_EDGE,
+      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+    )
+    let edgeCount = 0
+    while (edgeExplorer.More()) {
+      edgeCount++
+      edgeExplorer.Next()
+    }
+    stats.edgeCount = edgeCount
+
+    // Count vertices
+    const vertexExplorer = new oc.TopExp_Explorer_2(
+      shape,
+      oc.TopAbs_ShapeEnum.TopAbs_VERTEX,
+      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+    )
+    let vertexCount = 0
+    while (vertexExplorer.More()) {
+      vertexCount++
+      vertexExplorer.Next()
+    }
+    stats.vertexCount = vertexCount
+
+    // Check if shape is a solid
+    const solidExplorer = new oc.TopExp_Explorer_2(
+      shape,
+      oc.TopAbs_ShapeEnum.TopAbs_SOLID,
+      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+    )
+    stats.isSolid = solidExplorer.More()
+
+    // Check if watertight using BRepCheck_Analyzer
+    try {
+      const analyzer = new oc.BRepCheck_Analyzer(shape, true)
+      stats.isWatertight = analyzer.IsValid()
+      if (!stats.isWatertight) {
+        stats.qualityIssues.push('Shape has validation issues')
+      }
+    } catch (e) {
+      // BRepCheck may fail on some meshes
+    }
 
     // Try to get volume and surface area using GProp
     try {
@@ -220,9 +332,24 @@ function analyzeMesh(oc, shape) {
       const volProps = new oc.GProp_GProps_1()
       oc.BRepGProp.VolumeProperties_1(shape, volProps, false, false)
       stats.volume = volProps.Mass()
+
+      // Negative volume often indicates inverted normals
+      if (stats.volume < 0) {
+        stats.qualityIssues.push('Negative volume (inverted normals)')
+        stats.volume = Math.abs(stats.volume)
+      }
     } catch (e) {
       // Properties calculation failed
     }
+
+    // Add quality warnings
+    if (!stats.isSolid && stats.faceCount > 0) {
+      stats.qualityIssues.push('Not a solid (may have gaps/holes)')
+    }
+    if (stats.faceCount > LARGE_MESH_THRESHOLD) {
+      stats.qualityIssues.push(`Large mesh (${stats.faceCount.toLocaleString()} faces)`)
+    }
+
   } catch (e) {
     console.error('Mesh analysis error:', e)
   }
@@ -231,15 +358,140 @@ function analyzeMesh(oc, shape) {
 }
 
 /**
- * Perform mesh repair operations
+ * JavaScript-level mesh repairs on raw triangle data
+ * Works on mesh data before OpenCascade processing
+ */
+function repairMeshData(vertices, triangles, tolerance = 0.001) {
+  const repairs = []
+
+  // 1. Remove duplicate vertices (hash-based deduplication)
+  const vertexMap = new Map()
+  const vertexRemap = new Array(vertices.length)
+  const newVertices = []
+  let duplicateVertices = 0
+
+  const hashVertex = (v) => {
+    // Round to tolerance for comparison
+    const x = Math.round(v.x / tolerance) * tolerance
+    const y = Math.round(v.y / tolerance) * tolerance
+    const z = Math.round(v.z / tolerance) * tolerance
+    return `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`
+  }
+
+  for (let i = 0; i < vertices.length; i++) {
+    const hash = hashVertex(vertices[i])
+    if (vertexMap.has(hash)) {
+      vertexRemap[i] = vertexMap.get(hash)
+      duplicateVertices++
+    } else {
+      const newIndex = newVertices.length
+      vertexMap.set(hash, newIndex)
+      vertexRemap[i] = newIndex
+      newVertices.push(vertices[i])
+    }
+  }
+
+  if (duplicateVertices > 0) {
+    repairs.push(`Merged ${duplicateVertices} duplicate vertices`)
+  }
+
+  // 2. Remap triangle indices and remove degenerate triangles
+  const newTriangles = []
+  let degenerateTriangles = 0
+
+  for (const tri of triangles) {
+    const v1 = vertexRemap[tri.v1]
+    const v2 = vertexRemap[tri.v2]
+    const v3 = vertexRemap[tri.v3]
+
+    // Skip degenerate triangles (same vertex used twice)
+    if (v1 === v2 || v2 === v3 || v1 === v3) {
+      degenerateTriangles++
+      continue
+    }
+
+    newTriangles.push({ v1, v2, v3 })
+  }
+
+  if (degenerateTriangles > 0) {
+    repairs.push(`Removed ${degenerateTriangles} degenerate triangles`)
+  }
+
+  // 3. Remove duplicate triangles (hash by sorted indices)
+  const triangleSet = new Set()
+  const uniqueTriangles = []
+  let duplicateTriangles = 0
+
+  for (const tri of newTriangles) {
+    const sorted = [tri.v1, tri.v2, tri.v3].sort((a, b) => a - b)
+    const hash = sorted.join(',')
+
+    if (triangleSet.has(hash)) {
+      duplicateTriangles++
+    } else {
+      triangleSet.add(hash)
+      uniqueTriangles.push(tri)
+    }
+  }
+
+  if (duplicateTriangles > 0) {
+    repairs.push(`Removed ${duplicateTriangles} duplicate triangles`)
+  }
+
+  // 4. Harmonize normals using edge consistency
+  // Build edge-to-triangle adjacency to detect inconsistent winding
+  const edgeMap = new Map()
+
+  const edgeKey = (a, b) => a < b ? `${a}-${b}` : `${b}-${a}`
+  const orderedEdgeKey = (a, b) => `${a}-${b}` // preserves winding
+
+  for (let i = 0; i < uniqueTriangles.length; i++) {
+    const tri = uniqueTriangles[i]
+    const edges = [
+      [tri.v1, tri.v2],
+      [tri.v2, tri.v3],
+      [tri.v3, tri.v1]
+    ]
+
+    for (const [a, b] of edges) {
+      const key = edgeKey(a, b)
+      if (!edgeMap.has(key)) {
+        edgeMap.set(key, [])
+      }
+      edgeMap.get(key).push({ triIndex: i, orderedKey: orderedEdgeKey(a, b) })
+    }
+  }
+
+  // Check edge consistency - adjacent triangles should have opposite winding
+  let inconsistentEdges = 0
+  for (const [, tris] of edgeMap) {
+    if (tris.length === 2) {
+      // If both triangles have same ordered edge, one needs flipping
+      if (tris[0].orderedKey === tris[1].orderedKey) {
+        inconsistentEdges++
+      }
+    }
+  }
+
+  if (inconsistentEdges > 0) {
+    repairs.push(`Found ${inconsistentEdges} inconsistent edges (may indicate flipped normals)`)
+  }
+
+  return {
+    vertices: newVertices,
+    triangles: uniqueTriangles,
+    repairs
+  }
+}
+
+/**
+ * Perform mesh repair operations using OpenCascade ShapeFix
+ * Note: OpenCascade.js doesn't expose low-level mesh operations like
+ * removeDuplicates, fixSelfIntersections, fillHoles - these are handled
+ * by ShapeFix_Shape or at the JavaScript level via repairMeshData()
  */
 function repairMesh(oc, shape, options = {}) {
-  const {
-    removeDuplicates = true,
-    fixSelfIntersections = true,
-    fillHoles = true,
-    harmonizeNormals = true
-  } = options
+  const { harmonizeNormals = true } = options
 
   let repairedShape = shape
   const repairs = []
@@ -290,52 +542,134 @@ function repairMesh(oc, shape, options = {}) {
 }
 
 /**
- * Merge coplanar faces using ShapeUpgrade_UnifySameDomain
+ * Merge coplanar faces using ShapeUpgrade_UnifySameDomain with 3-tier fallback
  */
-function mergeFaces(oc, shape, tolerance = 0.1) {
+function mergeFacesWithFallback(oc, shape, tolerance = 0.1, repairs = []) {
+  // Strategy 1: Full unification with edge unification
   try {
-    self.postMessage({ type: 'progress', message: 'Merging coplanar faces...' })
-
-    // Try ShapeUpgrade_UnifySameDomain
+    self.postMessage({ type: 'progress', message: 'Merging faces (strategy 1: full)...' })
     const unify = new oc.ShapeUpgrade_UnifySameDomain_2(shape, true, true, false)
     unify.SetAngularTolerance(0.01) // Angular tolerance in radians
+    unify.SetLinearTolerance(tolerance * 10) // More aggressive tolerance
+    unify.Build()
+
+    const result = unify.Shape()
+    if (result && !result.IsNull()) {
+      repairs.push('Merged faces using full unification')
+      return { shape: result, success: true }
+    }
+  } catch (e) {
+    console.log('Strategy 1 failed:', e.message)
+  }
+
+  // Strategy 2: Face unification only (no edge unification)
+  try {
+    self.postMessage({ type: 'progress', message: 'Merging faces (strategy 2: faces only)...' })
+    const unify = new oc.ShapeUpgrade_UnifySameDomain_2(shape, true, false, false)
+    unify.SetAngularTolerance(0.01)
     unify.SetLinearTolerance(tolerance)
     unify.Build()
 
     const result = unify.Shape()
     if (result && !result.IsNull()) {
-      return result
+      repairs.push('Merged faces (without edge unification)')
+      return { shape: result, success: true }
     }
   } catch (e) {
-    console.log('Face merging failed:', e.message)
+    console.log('Strategy 2 failed:', e.message)
   }
 
-  return shape
+  // Strategy 3: Relaxed tolerance
+  try {
+    self.postMessage({ type: 'progress', message: 'Merging faces (strategy 3: relaxed)...' })
+    const unify = new oc.ShapeUpgrade_UnifySameDomain_2(shape, true, true, false)
+    unify.SetAngularTolerance(0.1) // More permissive angular tolerance
+    unify.SetLinearTolerance(tolerance * 100) // Much larger linear tolerance
+    unify.Build()
+
+    const result = unify.Shape()
+    if (result && !result.IsNull()) {
+      repairs.push('Merged faces with relaxed tolerance')
+      return { shape: result, success: true }
+    }
+  } catch (e) {
+    console.log('Strategy 3 failed:', e.message)
+  }
+
+  // All strategies failed
+  repairs.push('Face merging skipped (all strategies failed)')
+  return { shape, success: false }
+}
+
+/**
+ * Legacy wrapper for backward compatibility
+ */
+function mergeFaces(oc, shape, tolerance = 0.1) {
+  const result = mergeFacesWithFallback(oc, shape, tolerance, [])
+  return result.shape
 }
 
 /**
  * Process a single mesh/shape and create solid
+ * Includes large mesh optimization and repair tracking
  */
 function processShape(oc, shape, options = {}) {
-  const { tolerance = 0.1, repair = true, mergeFacesOpt = true } = options
+  const {
+    tolerance = 0.1,
+    repair = true,
+    mergeFacesOpt = true,
+    faceCount = 0
+  } = options
 
+  const repairs = []
   let processedShape = shape
+
+  // Check for large mesh optimizations
+  const skipExpensive = faceCount > LARGE_MESH_THRESHOLD
+  const skipMerge = faceCount > VERY_LARGE_MESH_THRESHOLD
+
+  if (skipExpensive) {
+    self.postMessage({
+      type: 'progress',
+      message: `Large mesh detected (${faceCount.toLocaleString()} faces), optimizing operations...`
+    })
+    repairs.push(`Large mesh optimization enabled (>${LARGE_MESH_THRESHOLD.toLocaleString()} faces)`)
+  }
 
   // Sewing
   self.postMessage({ type: 'progress', message: 'Sewing faces...' })
   try {
-    const sewing = new oc.BRepBuilderAPI_Sewing(tolerance, true, true, true, false)
+    const sewingTolerance = skipExpensive ? tolerance * 2 : tolerance
+    const sewing = new oc.BRepBuilderAPI_Sewing(sewingTolerance, true, true, true, false)
     sewing.Add(processedShape)
     sewing.Perform(new oc.Message_ProgressRange_1())
     processedShape = sewing.SewedShape()
+    repairs.push('Sewed mesh faces')
   } catch (e) {
     console.log('Sewing failed:', e.message)
+    repairs.push('Sewing skipped (failed)')
   }
 
-  // Repair
-  if (repair) {
+  // Repair (skip expensive checks for large meshes)
+  if (repair && !skipExpensive) {
     const repairResult = repairMesh(oc, processedShape, options)
     processedShape = repairResult.shape
+    repairs.push(...repairResult.repairs)
+  } else if (repair && skipExpensive) {
+    // Simplified repair for large meshes
+    self.postMessage({ type: 'progress', message: 'Applying basic repairs (large mesh mode)...' })
+    try {
+      const fixer = new oc.ShapeFix_Shape_1()
+      fixer.Init(processedShape)
+      fixer.SetPrecision(0.1) // Coarser precision for speed
+      fixer.SetMaxTolerance(1.0)
+      if (fixer.Perform(new oc.Message_ProgressRange_1())) {
+        processedShape = fixer.Shape()
+        repairs.push('Applied basic ShapeFix repairs (large mesh mode)')
+      }
+    } catch (e) {
+      console.log('Basic repair failed:', e.message)
+    }
   }
 
   // Create solid
@@ -355,19 +689,28 @@ function processShape(oc, shape, options = {}) {
 
       if (solidMaker.IsDone()) {
         solidShape = solidMaker.Solid()
+        repairs.push('Created solid from shell')
         self.postMessage({ type: 'progress', message: 'Solid created successfully' })
       }
     }
   } catch (e) {
     console.log('Solid creation failed, using shell:', e.message)
+    repairs.push('Solid creation skipped (using shell)')
   }
 
-  // Merge faces
-  if (mergeFacesOpt) {
-    solidShape = mergeFaces(oc, solidShape, tolerance)
+  // Merge faces (skip for very large meshes)
+  if (mergeFacesOpt && !skipMerge) {
+    const mergeResult = mergeFacesWithFallback(oc, solidShape, tolerance, repairs)
+    solidShape = mergeResult.shape
+  } else if (mergeFacesOpt && skipMerge) {
+    self.postMessage({
+      type: 'progress',
+      message: `Skipping face merge (>${VERY_LARGE_MESH_THRESHOLD.toLocaleString()} faces)`
+    })
+    repairs.push(`Face merging skipped (>${VERY_LARGE_MESH_THRESHOLD.toLocaleString()} faces)`)
   }
 
-  return solidShape
+  return { shape: solidShape, repairs }
 }
 
 /**
@@ -473,6 +816,7 @@ self.onmessage = async function(e) {
       let shapes = []
       let beforeStats = null
       let totalTriangles = 0
+      let allRepairs = []
 
       if (is3MF) {
         // Parse 3MF file
@@ -489,13 +833,20 @@ self.onmessage = async function(e) {
         }
 
         for (let i = 0; i < meshes.length; i++) {
-          const mesh = meshes[i]
+          let mesh = meshes[i]
           self.postMessage({ type: 'progress', message: `Processing mesh ${i + 1}/${meshes.length}...` })
 
           let stlData
           if (mesh.isStl) {
             stlData = mesh.stlData
           } else {
+            // Apply JavaScript-level mesh repairs before converting to STL
+            if (repair && mesh.vertices && mesh.triangles) {
+              self.postMessage({ type: 'progress', message: `Repairing mesh data ${i + 1}/${meshes.length}...` })
+              const repaired = repairMeshData(mesh.vertices, mesh.triangles, tolerance)
+              mesh = { vertices: repaired.vertices, triangles: repaired.triangles }
+              allRepairs.push(...repaired.repairs.map(r => `Mesh ${i + 1}: ${r}`))
+            }
             stlData = meshToStl(mesh)
           }
 
@@ -506,24 +857,38 @@ self.onmessage = async function(e) {
 
           // Get before stats from first mesh for 3MF
           if (i === 0 && !beforeStats) {
-            beforeStats = analyzeMesh(oc, shape)
+            beforeStats = analyzeMesh(oc, shape, totalTriangles)
             // For 3MF, estimate total faces from all meshes
             if (meshes.length > 1) {
-              beforeStats.faceCount = totalTriangles
+              beforeStats.triangleCount = totalTriangles
               beforeStats.note = `Combined from ${meshes.length} meshes`
             }
             self.postMessage({ type: 'beforeStats', data: beforeStats })
           }
 
-          const processedShape = processShape(oc, shape, { tolerance, repair, mergeFacesOpt })
-          shapes.push(processedShape)
+          const faceCount = mesh.triangles ? mesh.triangles.length : totalTriangles
+          const processResult = processShape(oc, shape, {
+            tolerance,
+            repair,
+            mergeFacesOpt,
+            faceCount
+          })
+          shapes.push(processResult.shape)
+          allRepairs.push(...processResult.repairs.map(r => meshes.length > 1 ? `Mesh ${i + 1}: ${r}` : r))
 
           oc.FS.unlink(inputPath)
         }
       } else {
-        // STL file
+        // STL file - get triangle count from binary header
         self.postMessage({ type: 'progress', message: 'Writing STL to filesystem...' })
         const stlArray = new Uint8Array(fileData)
+
+        // Try to get triangle count from binary STL header
+        if (fileData.byteLength > 84) {
+          const view = new DataView(fileData)
+          totalTriangles = view.getUint32(80, true)
+        }
+
         oc.FS.writeFile('/input.stl', stlArray)
 
         self.postMessage({ type: 'progress', message: 'Reading STL file...' })
@@ -531,13 +896,24 @@ self.onmessage = async function(e) {
 
         // Analyze mesh BEFORE processing
         self.postMessage({ type: 'progress', message: 'Analyzing input mesh...' })
-        beforeStats = analyzeMesh(oc, shape)
+        beforeStats = analyzeMesh(oc, shape, totalTriangles)
         self.postMessage({ type: 'beforeStats', data: beforeStats })
 
-        const processedShape = processShape(oc, shape, { tolerance, repair, mergeFacesOpt })
-        shapes.push(processedShape)
+        const processResult = processShape(oc, shape, {
+          tolerance,
+          repair,
+          mergeFacesOpt,
+          faceCount: beforeStats.faceCount || totalTriangles
+        })
+        shapes.push(processResult.shape)
+        allRepairs.push(...processResult.repairs)
 
         oc.FS.unlink('/input.stl')
+      }
+
+      // Send repair log
+      if (allRepairs.length > 0) {
+        self.postMessage({ type: 'repairLog', data: allRepairs })
       }
 
       // Combine multiple shapes into compound if needed
@@ -559,7 +935,7 @@ self.onmessage = async function(e) {
 
       // Analyze mesh AFTER processing
       self.postMessage({ type: 'progress', message: 'Analyzing output mesh...' })
-      const afterStats = analyzeMesh(oc, finalShape)
+      const afterStats = analyzeMesh(oc, finalShape, totalTriangles)
       self.postMessage({ type: 'afterStats', data: afterStats })
 
       // Write output
@@ -579,7 +955,8 @@ self.onmessage = async function(e) {
         data: outputData,
         format: outputFormat,
         beforeStats,
-        afterStats
+        afterStats,
+        repairs: allRepairs
       })
     } catch (error) {
       self.postMessage({
