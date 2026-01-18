@@ -5,8 +5,20 @@
  *           F3D (Fusion 360) ACIS binary support
  */
 
-// Load F3D/ACIS support modules
-importScripts('/acis-parser.js', '/acis-geometry.js')
+// Auto-detect base path from worker's own URL (works on GitHub Pages, subdomains, etc.)
+const WORKER_BASE_PATH = (() => {
+  const url = self.location.href
+  // Remove the worker filename to get the base directory
+  return url.substring(0, url.lastIndexOf('/') + 1)
+})()
+
+// Load F3D/ACIS support modules (if they exist)
+try {
+  importScripts(WORKER_BASE_PATH + 'acis-parser.js', WORKER_BASE_PATH + 'acis-geometry.js')
+} catch (e) {
+  // ACIS modules are optional - F3D support will be disabled
+  console.log('ACIS modules not loaded (F3D support disabled):', e.message)
+}
 
 let ocInstance = null
 
@@ -17,7 +29,7 @@ const VERY_LARGE_MESH_THRESHOLD = 100000 // Skip face merging above this
 async function initOpenCascade() {
   self.postMessage({ type: 'progress', message: 'Fetching OpenCascade.js...' })
 
-  const response = await fetch('/opencascade/opencascade.full.js')
+  const response = await fetch(WORKER_BASE_PATH + 'opencascade/opencascade.full.js')
   let scriptText = await response.text()
 
   // Remove ES module export statements
@@ -31,7 +43,7 @@ async function initOpenCascade() {
   self.postMessage({ type: 'progress', message: 'Initializing WASM (~50MB)...' })
 
   return await Module({
-    locateFile: (file) => `/opencascade/${file}`
+    locateFile: (file) => WORKER_BASE_PATH + 'opencascade/' + file
   })
 }
 
