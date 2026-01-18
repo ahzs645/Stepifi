@@ -10,7 +10,7 @@ import {
 } from './constants.js'
 import {
   ACIS_VALUE_CHUNKS, AcisChunkEntityRef, AcisChunkEnumValue,
-  ACIS_REF_NONE, createChunk,
+  ACIS_REF_NONE, createChunk, setIntSize,
   getUInt8, getUInt32, getSInt32, getSInt64, getUInt64
 } from './chunks.js'
 import { setReader, setScale, setVersion } from './utils.js'
@@ -393,6 +393,14 @@ export class AcisReader {
       if (this.header.format.endsWith('8')) {
         this._getSLong = getSInt64
         this._getULong = getUInt64
+        setIntSize(8) // 64-bit integers
+      } else {
+        setIntSize(4) // 32-bit integers (default)
+      }
+
+      // Mark as ASM format if format string starts with "ASM"
+      if (this.header.format.startsWith('ASM')) {
+        this.header.asm = [0, 0, 0, 0] // Will be updated by AsmHeader entity if present
       }
 
       const [version, p1] = this._getULong(this._data, 15)

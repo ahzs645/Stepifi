@@ -17,6 +17,7 @@ import {
 
 /**
  * Base class for topology entities
+ * Handles version-specific chunk skipping from _handle_topology_ in Python
  */
 export class Topology extends Entity {
   constructor() {
@@ -25,6 +26,26 @@ export class Topology extends Entity {
 
   set(record) {
     let i = super.set(record)
+
+    // Handle topology-specific skips based on version (from Python _handle_topology_)
+    const vrs = getVersion()
+
+    if (isASM()) {
+      // ASM format: Entity.set() already skips 1 for the LONG at position 1.
+      // Topology needs to skip 1 more for the extra ref field.
+      i += 1
+    } else {
+      // Non-ASM format:
+      // For version > 10.0, skip 1 chunk
+      if (vrs > 10.0) {
+        i += 1
+      }
+      // For version > 6.0, skip 1 chunk
+      if (vrs > 6.0) {
+        i += 1
+      }
+    }
+
     return i
   }
 }
@@ -534,21 +555,35 @@ export class Edge extends Topology {
     this._owner = null   // Owning coedge
     this._curve = null   // Curve geometry
     this.sense = 'forward'
+    this.parameter1 = 0.0  // Start parameter on curve
+    this.parameter2 = 1.0  // End parameter on curve
+    this.text = ''
   }
 
   set(record) {
     let i = super.set(record)
     ;[this._start, i] = getRefNode(record, i, 'vertex')
 
-    // Version-specific handling
-    if (getAsmMajor() > 217) {
-      i += 1 // skip
+    // Version > 4.0: read start parameter
+    if (getVersion() > 4.0) {
+      [this.parameter1, i] = getFloat(record.chunks, i)
     }
 
     ;[this._end, i] = getRefNode(record, i, 'vertex')
+
+    // Version > 4.0: read end parameter
+    if (getVersion() > 4.0) {
+      [this.parameter2, i] = getFloat(record.chunks, i)
+    }
+
     ;[this._owner, i] = getRefNode(record, i, 'coedge')
     ;[this._curve, i] = getRefNode(record, i, 'curve')
     ;[this.sense, i] = getEnumByTag(record.chunks, i, SENSE)
+
+    // Version > 5.0: read text
+    if (getVersion() > 5.0 && i < record.chunks.length) {
+      [this.text, i] = getText(record.chunks, i)
+    }
 
     return i
   }

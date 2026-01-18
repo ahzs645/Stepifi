@@ -88,6 +88,39 @@ for (const mod of modules) {
   bundle += processModule(mod)
 }
 
+// Add class mappings initialization (from index.js)
+bundle += `
+  // ============================================================================
+  // Class Mappings Initialization (from index.js)
+  // ============================================================================
+
+  // Initialize spline.js with class mappings
+  setCurveClasses({
+    'degenerate': CurveDegenerate,
+    'ellipse': CurveEllipse,
+    'intcurve': CurveInt,
+    'pcurve': CurveP,
+    'straight': CurveStraight,
+    'compcurv': CurveComp,
+    'intcurve-intcurve': CurveIntInt,
+    'null_curve': null,
+    'null_pcurve': null
+  })
+
+  setSurfaceClasses({
+    'cone': SurfaceCone,
+    'mesh': SurfaceMesh,
+    'plane': SurfacePlane,
+    'sphere': SurfaceSphere,
+    'spline': SurfaceSpline,
+    'torus': SurfaceTorus,
+    'null_surface': null
+  })
+
+  setTransformClass(Transform)
+
+`
+
 // Add the parseF3D function and exports
 bundle += `
   // ============================================================================

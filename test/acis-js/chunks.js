@@ -14,6 +14,26 @@ import {
 } from './constants.js'
 
 // ============================================================================
+// Integer Size Mode (32-bit or 64-bit)
+// ============================================================================
+
+let _intSize = 4  // Default 32-bit mode
+
+/**
+ * Set the integer size mode (4 for 32-bit, 8 for 64-bit)
+ */
+export function setIntSize(size) {
+  _intSize = size
+}
+
+/**
+ * Get current integer size
+ */
+export function getIntSize() {
+  return _intSize
+}
+
+// ============================================================================
 // Binary Reading Helpers
 // ============================================================================
 
@@ -37,7 +57,7 @@ export function getSInt16(data, offset) {
 
 export function getUInt32(data, offset) {
   return [
-    data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24) >>> 0,
+    (data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24)) >>> 0,
     offset + 4
   ]
 }
@@ -126,8 +146,12 @@ export class AcisChunkLong extends AcisChunk {
   }
 
   read(data, offset) {
-    // Uses _getSLong which can be 32 or 64 bit
-    [this.val, offset] = getSInt32(data, offset)
+    // Uses _getSLong which can be 32 or 64 bit based on file format
+    if (_intSize === 8) {
+      [this.val, offset] = getSInt64(data, offset)
+    } else {
+      [this.val, offset] = getSInt32(data, offset)
+    }
     this.value = this.val
     return offset
   }
@@ -435,9 +459,14 @@ export function createChunk(tag, data, offset, scale = 1.0) {
     return [chunk, o1]
   }
   if (tag === TAG_ENUM_VALUE) {
-    const chunk = new AcisChunkUtf8U8()
-    const o1 = chunk.read(data, offset)
-    chunk.tag = TAG_ENUM_VALUE
+    // TAG_ENUM_VALUE reads a long integer (4 or 8 bytes based on mode)
+    let val, o1
+    if (_intSize === 8) {
+      [val, o1] = getUInt64(data, offset)
+    } else {
+      [val, o1] = getUInt32(data, offset)
+    }
+    const chunk = new AcisChunk(TAG_ENUM_VALUE, val)
     chunk.type = 'enum'
     return [chunk, o1]
   }

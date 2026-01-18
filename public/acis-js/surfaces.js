@@ -137,32 +137,46 @@ export class SurfaceCone extends Surface {
     super('cone')
     this.center = { ...CENTER }
     this.axis = { ...DIR_Z }
-    this.majorRadius = 1.0
-    this.minorRadius = 1.0
+    this.major = { ...DIR_X }  // Major direction vector (not radius)
     this.ratio = 1.0
-    this.semiAngle = Math.PI / 4
-    this.uvOrigin = { ...DIR_X }
-    this.sensev = 'forward_v'
+    this.range = new Interval(new Range('I', MIN_INF), new Range('I', MAX_INF))
+    this.sine = 0.0
+    this.cosine = 0.0
+    this.scale = 1.0
+    this.sense = 'forward'
     this.uRange = new Interval(new Range('I', MIN_0), new Range('I', MAX_2PI))
     this.vRange = new Interval(new Range('I', MIN_INF), new Range('I', MAX_INF))
   }
 
   setSubtype(chunks, index) {
     let i = index
+    // Python format: center axis major ratio range sine cosine scale sense urange vrange
     ;[this.center, i] = getLocation(chunks, i)
     ;[this.axis, i] = getVector(chunks, i)
-    ;[this.majorRadius, i] = getLength(chunks, i)
+    ;[this.major, i] = getVector(chunks, i)  // Direction vector, not scalar
     ;[this.ratio, i] = getFloat(chunks, i)
-    ;[this.uvOrigin, i] = getLocation(chunks, i)
-    ;[this.semiAngle, i] = getFloat(chunks, i)
-    ;[this.sensev, i] = getEnumByTag(chunks, i, SENSEV)
+    ;[this.range, i] = getInterval(chunks, i, MIN_INF, MAX_INF, getScale())
+    ;[this.sine, i] = getFloat(chunks, i)
+    ;[this.cosine, i] = getFloat(chunks, i)
+    ;[this.scale, i] = getFloat(chunks, i)
+    ;[this.sense, i] = getEnumByTag(chunks, i, SENSE)
     ;[this.uRange, i] = getInterval(chunks, i, MIN_0, MAX_2PI, 1.0)
     ;[this.vRange, i] = getInterval(chunks, i, MIN_INF, MAX_INF, getScale())
     return i
   }
 
+  // Compute semi-angle from sine/cosine
+  getSemiAngle() {
+    return Math.atan2(this.sine, this.cosine)
+  }
+
+  // Compute radius at v=0
+  getMajorRadius() {
+    return SIZE(this.major)
+  }
+
   getMinorRadius() {
-    return this.majorRadius * this.ratio
+    return this.getMajorRadius() * this.ratio
   }
 
   isCircular() {
@@ -176,10 +190,10 @@ export class SurfaceCone extends Surface {
         type: 'cone',
         center: this.center,
         axis: this.axis,
-        majorRadius: this.majorRadius,
+        majorRadius: this.getMajorRadius(),
         minorRadius: this.getMinorRadius(),
-        semiAngle: this.semiAngle,
-        uvOrigin: this.uvOrigin
+        semiAngle: this.getSemiAngle(),
+        major: this.major
       }
     }
     return this.shape
@@ -209,8 +223,8 @@ export class SurfaceSphere extends Surface {
     let i = index
     ;[this.center, i] = getLocation(chunks, i)
     ;[this.radius, i] = getLength(chunks, i)
-    ;[this.uvOrigin, i] = getLocation(chunks, i)
-    ;[this.pole, i] = getLocation(chunks, i)
+    ;[this.uvOrigin, i] = getVector(chunks, i)  // Direction vector
+    ;[this.pole, i] = getVector(chunks, i)       // Direction vector
     ;[this.sensev, i] = getEnumByTag(chunks, i, SENSEV)
     ;[this.uRange, i] = getInterval(chunks, i, MIN_0, MAX_2PI, 1.0)
     ;[this.vRange, i] = getInterval(chunks, i, -Math.PI / 2, Math.PI / 2, 1.0)

@@ -7,7 +7,8 @@
 import { TAG_ENTITY_REF, ROTATION, REFLECTION, SHEAR } from './constants.js'
 import {
   getRefNode, getBoolean, getInteger, getFloat, getFloats, getText,
-  getLocation, getVector, getVersion, isASM, getScale, getEnumByTag
+  getLocation, getVector, getVersion, isASM, getScale, getEnumByTag,
+  getReader
 } from './utils.js'
 
 // ============================================================================
@@ -68,6 +69,11 @@ export class Entity {
       if (firstChunk.tag === TAG_ENTITY_REF || firstChunk.type === 'entity_ref') {
         [this._attrib, i] = getRefNode(record, 0, 'attrib')
       }
+    }
+
+    // For ASM format, there's an extra LONG at position 1 that needs to be skipped
+    if (isASM() && i < record.chunks.length) {
+      i += 1
     }
 
     return i
@@ -419,6 +425,11 @@ export class AsmHeader extends Entity {
       this.minor = v[1]
       this.revision = v[2]
       this.build = v[3]
+      // Set ASM version on reader's header (like Python line 4130)
+      const reader = getReader()
+      if (reader && reader.header) {
+        reader.header.asm = [this.major, this.minor, this.revision, this.build]
+      }
     }
     return i2
   }

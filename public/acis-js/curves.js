@@ -942,15 +942,22 @@ export class CurveInt extends Curve {
 
   // Bulk router (Python lines 2578-2593)
   setBulk(chunks, index) {
-    ;[this.subtype, ] = getValue(chunks, index)
-    let i = index + 1
+    let i = index
+
+    // Skip TAG_SUBTYPE_OPEN marker if present
+    if (chunks[i] && chunks[i].tag === TAG_SUBTYPE_OPEN) {
+      i += 1
+    }
+
+    ;[this.subtype, ] = getValue(chunks, i)
+    i += 1
 
     if (this.subtype === 'ref') {
       return this.setRef(chunks, i)
     }
 
     try {
-      if ((getVersion() >= 25.0) && !isASM()) {
+      if (getVersion() >= 25.0) {
         ;[this.id, i] = getInteger(chunks, i)
       }
       const reader = getReader()
@@ -968,7 +975,7 @@ export class CurveInt extends Curve {
         throw new Error(`Method ${prm[0]} not found for intcurve '${this.subtype}'`)
       }
 
-      return fkt.call(this, chunks, i + prm[1], prm[2])
+      return fkt.call(this, chunks, i, prm[2])
     } catch (e) {
       console.error(`Error parsing intcurve '${this.subtype}':`, e.message)
       return i
@@ -1051,8 +1058,15 @@ export class CurveIntInt extends CurveInt {
   }
 
   setBulk(chunks, index) {
-    ;[this.subtype, ] = getValue(chunks, index)
-    let i = index + 1
+    let i = index
+
+    // Skip TAG_SUBTYPE_OPEN marker if present
+    if (chunks[i] && chunks[i].tag === TAG_SUBTYPE_OPEN) {
+      i += 1
+    }
+
+    ;[this.subtype, ] = getValue(chunks, i)
+    i += 1
 
     if (this.subtype === 'ref') {
       return this.setRef(chunks, i)
@@ -1168,15 +1182,22 @@ export class CurveP extends Curve {
 
   // Bulk router (Python lines 2691-2703)
   setBulk(chunks, index) {
-    ;[this.subtype, ] = getValue(chunks, index)
-    let i = index + 1
+    let i = index
+
+    // Skip TAG_SUBTYPE_OPEN marker if present
+    if (chunks[i] && chunks[i].tag === TAG_SUBTYPE_OPEN) {
+      i += 1
+    }
+
+    ;[this.subtype, ] = getValue(chunks, i)
+    i += 1
 
     if (this.subtype === 'ref') {
       return this.setRef(chunks, i)
     }
 
     try {
-      if ((getVersion() >= 25.0) && !isASM()) {
+      if (getVersion() >= 25.0) {
         ;[this.id, i] = getInteger(chunks, i)
       }
 
