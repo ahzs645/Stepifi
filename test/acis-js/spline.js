@@ -4,16 +4,40 @@
  * Ported from Acis.py lines 584-1000
  */
 
-import { CLOSURE } from './constants.js'
+import {
+  TAG_ENTITY_REF, TAG_UTF8_U8, TAG_IDENT, TAG_SUBIDENT,
+  TAG_DOUBLE, TAG_POSITION, TAG_VECTOR_3D, SENSE, CLOSURE
+} from './constants.js'
 import { BS_Curve, BS_Surface } from './data-classes.js'
 import {
   getValue, getBoolean, getInteger, getFloat, getFloats, getFloatArray,
-  getLength, getText, getEnumByValue,
+  getLength, getText, getEnumByValue, getEnumByTag, getPoint,
   getDimensionCurve, getDimensionSurface, getClosureCurve, getClosureSurface,
   readKnotsMults, adjustMultsKnots,
   readPoints2DList, readPoints3DList, readPoints3DSurface,
   getVersion, isASM, getScale
 } from './utils.js'
+
+// ============================================================================
+// Curve and Surface Class Mappings (set via setters to avoid circular deps)
+// ============================================================================
+
+let CURVES = null
+let SURFACES = null
+
+/**
+ * Set the curve classes mapping (called from index.js after all modules loaded)
+ */
+export function setCurveClasses(mapping) {
+  CURVES = mapping
+}
+
+/**
+ * Set the surface classes mapping (called from index.js after all modules loaded)
+ */
+export function setSurfaceClasses(mapping) {
+  SURFACES = mapping
+}
 
 // ============================================================================
 // B-Spline Curve Readers
@@ -109,59 +133,169 @@ export function readSplineSurface(chunks, index, toleranceAtEnd) {
 }
 
 // ============================================================================
-// Curve Factory
+// Curve Factory (Python readCurve lines 684-693)
 // ============================================================================
 
 /**
  * Read embedded curve definition
+ * Creates a curve instance and parses its subtype data
  */
 export function readCurve(chunks, index) {
-  const chunk = chunks[index]
-  const val = chunk.val || chunk.value
+  const [val, i] = getValue(chunks, index)
 
-  if (val === 'null_curve' || val === 'nullbs') {
-    return [null, index + 1]
+  // Null curve check
+  if (val === 'null_curve' || val === 'nullbs' || val === 'null_pcurve') {
+    return [null, i]
   }
 
-  // Handle different curve types
-  // This would return curve data structure
-  return [{ type: val, index }, index + 1]
+  // If we don't have the curve mappings yet (before initialization), return stub
+  if (!CURVES) {
+    console.warn(`readCurve: CURVES mapping not initialized, returning stub for '${val}'`)
+    return [{ type: val, index: i }, i]
+  }
+
+  // Get the curve class
+  const CurveClass = CURVES[val]
+  if (CurveClass === undefined) {
+    console.warn(`readCurve: Unknown curve type '${val}'`)
+    return [{ type: val, index: i }, i]
+  }
+
+  // Null mapping means null curve
+  if (CurveClass === null) {
+    return [null, i]
+  }
+
+  try {
+    // Create instance and parse subtype
+    const curve = new CurveClass()
+    curve.subtype = val
+    const newIndex = curve.setSubtype(chunks, i)
+    return [curve, newIndex]
+  } catch (e) {
+    console.error(`readCurve: Error parsing curve type '${val}':`, e)
+    throw new Error(`Unknown curve-type '${val}'!`)
+  }
 }
 
 // ============================================================================
-// Surface Factory
+// Surface Factory (Python readSurface lines 695-715)
 // ============================================================================
 
 /**
  * Read embedded surface definition
+ * Creates a surface instance and parses its subtype data
  */
 export function readSurface(chunks, index) {
   const chunk = chunks[index]
-  const val = chunk.val || chunk.value
+  let i = index + 1
+  const subtype = chunk.val || chunk.value
 
-  if (val === 'null_surface' || val === 'nullbs') {
-    return [null, index + 1]
+  // Check tag type for valid surface
+  if (chunk.tag === TAG_UTF8_U8 || chunk.tag === TAG_IDENT || chunk.tag === TAG_SUBIDENT) {
+    // Null surface check
+    if (subtype === 'null_surface' || subtype === 'nullbs') {
+      return [null, i]
+    }
+
+    // If we don't have the surface mappings yet (before initialization), return stub
+    if (!SURFACES) {
+      console.warn(`readSurface: SURFACES mapping not initialized, returning stub for '${subtype}'`)
+      return [{ type: subtype, index: i }, i]
+    }
+
+    // Get the surface class
+    const SurfaceClass = SURFACES[subtype]
+    if (SurfaceClass === undefined) {
+      console.warn(`readSurface: Unknown surface type '${subtype}'`)
+      return [{ type: subtype, index: i }, i]
+    }
+
+    // Null mapping means null surface
+    if (SurfaceClass === null) {
+      return [null, i]
+    }
+
+    try {
+      // Create instance and parse subtype
+      const surface = new SurfaceClass()
+      surface.subtype = subtype
+      const newIndex = surface.setSubtype(chunks, i)
+      return [surface, newIndex]
+    } catch (e) {
+      console.error(`readSurface: Error parsing surface type '${subtype}':`, e)
+      throw new Error(`Unknown surface-type '${subtype}'!`)
+    }
   }
 
-  // Handle different surface types
-  return [{ type: val, index }, index + 1]
+  // FIXME: this is a dirty hack from Python (lines 709-715)
+  if (chunk.tag === TAG_DOUBLE) {
+    const [a, i2] = getFloats(chunks, index, 5)
+    return [null, i2]
+  }
+  if (chunk.tag === TAG_POSITION || chunk.tag === TAG_VECTOR_3D) {
+    const [a, i2] = getFloats(chunks, i, 2)
+    return [null, i2]
+  }
+
+  return [null, i]
 }
 
 // ============================================================================
-// Law/Formula Reader
+// Law Reader (Python readLaw lines 659-677)
 // ============================================================================
 
+// Transform class reference (set via setter to avoid circular deps)
+let TransformClass = null
+
 /**
- * Read law formula
+ * Set the Transform class (called from index.js after all modules loaded)
  */
-export function readFormula(chunks, index) {
+export function setTransformClass(cls) {
+  TransformClass = cls
+}
+
+/**
+ * Read law (readLaw in Python lines 659-677)
+ * Handles special cases: TRANS, EDGE, SPLINE_LAW, plus formula expressions
+ */
+export function readLaw(chunks, index) {
   const [name, i1] = getText(chunks, index)
 
+  // Null law
   if (name === 'null_law') {
-    return [[name, []], i1]
+    return [[name, null], i1]
   }
 
-  // Read sub-laws based on type
+  // Special law types (Python lines 661-676)
+  if (name === 'TRANS') {
+    // Transform law: parse a Transform inline
+    if (!TransformClass) {
+      console.warn('readLaw: TransformClass not initialized for TRANS type')
+      return [[name, null], i1]
+    }
+    const transform = new TransformClass()
+    const i2 = transform.setBulk(chunks, i1)
+    return [[name, transform], i2]
+  }
+
+  if (name === 'EDGE') {
+    // Edge law: curve + 2 floats (parameter range)
+    const [curve, i2] = readCurve(chunks, i1)
+    const [floats, i3] = getFloats(chunks, i2, 2)
+    return [[name, curve, floats], i3]
+  }
+
+  if (name === 'SPLINE_LAW') {
+    // Spline law: integer + 2 float arrays + point
+    const [a, i2] = getInteger(chunks, i1)
+    const [b, i3] = getFloatArray(chunks, i2)
+    const [c, i4] = getFloatArray(chunks, i3)
+    const [d, i5] = getPoint(chunks, i4)
+    return [[name, a, b, c, d], i5]
+  }
+
+  // Read sub-laws based on type (formula expressions)
   const subLaws = []
   let i = i1
 
@@ -171,7 +305,7 @@ export function readFormula(chunks, index) {
     case 'vector': {
       // Vector law: 3 sub-laws for x, y, z
       for (let k = 0; k < 3; k++) {
-        const [subLaw, i2] = readFormula(chunks, i)
+        const [subLaw, i2] = readLaw(chunks, i)
         subLaws.push(subLaw)
         i = i2
       }
@@ -185,8 +319,8 @@ export function readFormula(chunks, index) {
     case 'cross':
     case 'dot': {
       // Binary operators: 2 sub-laws
-      const [law1, i2] = readFormula(chunks, i)
-      const [law2, i3] = readFormula(chunks, i2)
+      const [law1, i2] = readLaw(chunks, i)
+      const [law2, i3] = readLaw(chunks, i2)
       subLaws.push(law1, law2)
       i = i3
       break
@@ -202,7 +336,7 @@ export function readFormula(chunks, index) {
     case 'ln':
     case 'sqrt': {
       // Unary operators: 1 sub-law
-      const [subLaw, i2] = readFormula(chunks, i)
+      const [subLaw, i2] = readLaw(chunks, i)
       subLaws.push(subLaw)
       i = i2
       break
@@ -224,7 +358,8 @@ export function readFormula(chunks, index) {
     }
 
     default:
-      // Unknown law type - try to continue
+      // Unknown law type - return as Law object (Python line 677)
+      // Just return the name, caller can handle unknown types
       console.warn(`Unknown law type: ${name}`)
   }
 
@@ -232,40 +367,52 @@ export function readFormula(chunks, index) {
 }
 
 // ============================================================================
-// Blend Reader
+// Formula Reader (Python readFormula lines 1063-1072)
 // ============================================================================
 
 /**
- * Read blend data
+ * Read formula (Python lines 1063-1072)
+ * Reads formula name + count + array of laws
  */
-export function readBlend(chunks, index) {
-  const [type, i1] = getText(chunks, index)
-  let i = i1
+export function readFormula(chunks, index) {
+  const [frml, i1] = getValue(chunks, index)
 
-  const blend = { type }
-
-  // Read blend-specific data based on type
-  switch (type) {
-    case 'rb_blend':
-    case 'rolling_ball': {
-      ;[blend.radius, i] = getLength(chunks, i)
-      break
-    }
-
-    case 'var_blend':
-    case 'variable': {
-      ;[blend.startRadius, i] = getLength(chunks, i)
-      ;[blend.endRadius, i] = getLength(chunks, i)
-      break
-    }
-
-    case 'chamfer': {
-      ;[blend.distance, i] = getLength(chunks, i)
-      break
-    }
+  // Null law
+  if (frml === 'null_law') {
+    return [[null, []], i1]
   }
 
-  return [blend, i]
+  // Read count of sub-laws
+  const [n, i2] = getInteger(chunks, i1)
+
+  // Read n laws
+  const vars = []
+  let i = i2
+  for (let k = 0; k < n; k++) {
+    const [v, i3] = readLaw(chunks, i)
+    vars.push(v)
+    i = i3
+  }
+
+  return [[frml, vars], i]
+}
+
+// ============================================================================
+// Blend Reader (Python lines 651-657)
+// ============================================================================
+
+/**
+ * Read blend data - B-spline curve with sense and factor
+ */
+export function readBlend(chunks, index) {
+  const [nubs, i] = readBS2Curve(chunks, index)
+  if (nubs !== null) {
+    let i2 = i
+    ;[nubs.sense, i2] = getEnumByTag(chunks, i2, SENSE)
+    ;[nubs.factor, i2] = getFloat(chunks, i2)
+    return [nubs, i2]
+  }
+  return [null, index]
 }
 
 // ============================================================================
@@ -297,24 +444,29 @@ export function readLofSubdata(chunks, index) {
 }
 
 // ============================================================================
-// Discontinuity Info Reader
+// Discontinuity Info Reader (Python lines 717-728)
 // ============================================================================
 
 /**
- * Read discontinuity info (version-specific)
+ * Read discontinuity info - 6 float arrays + optional boolean
  */
 export function getDiscontinuityInfo(chunks, index, inventor) {
   let i = index
-  const info = []
 
-  if (getVersion() >= 2.0) {
-    // Read 3 float arrays for discontinuity info
-    for (let k = 0; k < 3; k++) {
-      const [arr, i2] = getFloatArray(chunks, i)
-      info.push(arr)
-      i = i2
-    }
+  // Read 6 float arrays
+  const [a1, i1] = getFloatArray(chunks, i)
+  const [a2, i2] = getFloatArray(chunks, i1)
+  const [a3, i3] = getFloatArray(chunks, i2)
+  const [a4, i4] = getFloatArray(chunks, i3)
+  const [a5, i5] = getFloatArray(chunks, i4)
+  const [a6, i6] = getFloatArray(chunks, i5)
+
+  let e = false
+  let finalIndex = i6
+
+  if (inventor) {
+    ;[e, finalIndex] = getBoolean(chunks, i6)
   }
 
-  return [info, i]
+  return [[a1, a2, a3, a4, a5, a6, e], finalIndex]
 }

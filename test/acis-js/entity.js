@@ -4,10 +4,10 @@
  * Ported from Acis.py lines 1527-1628
  */
 
-import { TAG_ENTITY_REF } from './constants.js'
+import { TAG_ENTITY_REF, ROTATION, REFLECTION, SHEAR } from './constants.js'
 import {
   getRefNode, getBoolean, getInteger, getFloat, getFloats, getText,
-  getLocation, getVector, getVersion, isASM
+  getLocation, getVector, getVersion, isASM, getScale, getEnumByTag
 } from './utils.js'
 
 // ============================================================================
@@ -143,6 +143,30 @@ export class Transform extends Entity {
     ;[this.shear, i5] = getBoolean(record.chunks, i5)
 
     return i5
+  }
+
+  /**
+   * Set bulk from chunks (used by readLaw for TRANS type)
+   * Python Acis.py lines 1613-1620
+   */
+  setBulk(chunks, index) {
+    const scale = getScale()
+    const [a, i] = getFloats(chunks, index, 13)
+
+    // Build 4x4 matrix from 13 floats (Python line 1616)
+    // Format: rotation(3x3) + translation(3) + scale(1)
+    this.matrix[0][0] = a[0]; this.matrix[0][1] = a[3]; this.matrix[0][2] = a[6]; this.matrix[0][3] = a[9] * scale
+    this.matrix[1][0] = a[1]; this.matrix[1][1] = a[4]; this.matrix[1][2] = a[7]; this.matrix[1][3] = a[10] * scale
+    this.matrix[2][0] = a[2]; this.matrix[2][1] = a[5]; this.matrix[2][2] = a[8]; this.matrix[2][3] = a[11] * scale
+    this.matrix[3][3] = a[12] // scale factor
+
+    // Read enum flags
+    let i2 = i
+    ;[this.rotation, i2] = getEnumByTag(chunks, i2, ROTATION)
+    ;[this.reflect, i2] = getEnumByTag(chunks, i2, REFLECTION)
+    ;[this.shear, i2] = getEnumByTag(chunks, i2, SHEAR)
+
+    return i2
   }
 
   /**

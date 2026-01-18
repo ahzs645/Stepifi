@@ -7,7 +7,7 @@
 import {
   TAG_TRUE, TAG_FALSE, TAG_UTF8_U8, TAG_DOUBLE, TAG_ENTITY_REF,
   TAG_POSITION, TAG_VECTOR_3D, TAG_ENUM_VALUE, TAG_LONG, TAG_FLOAT,
-  TAG_TERMINATOR, TAG_IDENT, TAG_SUBIDENT,
+  TAG_TERMINATOR, TAG_IDENT, TAG_SUBIDENT, TAG_SHORT, TAG_CHAR,
   RANGE, SENSE, SENSEV, SIDES, SIDE, BOOLEAN, CLOSURE, SINGULARITY,
   MIN_INF, MAX_INF, MIN_0, MAX_2PI
 } from './constants.js'
@@ -74,18 +74,31 @@ export function getValue(chunks, index) {
 
 /**
  * Get entity reference from chunk
+ * In ASM 64-bit format, there may be extra integer fields - skip them
  */
 export function getRefNode(record, index, expectedName = null) {
-  const chunk = record.chunks[index]
-  if (chunk.tag === TAG_ENTITY_REF || chunk.type === 'entity_ref') {
-    const ref = chunk.record || chunk
-    if (expectedName !== null && ref !== null && ref.name && !ref.name.endsWith(expectedName)) {
-      // Type mismatch - but don't throw, just warn
-      // console.warn(`Expected ${expectedName} but found ${ref.name}`)
+  // Skip non-reference chunks (extra integer fields in ASM format)
+  while (index < record.chunks.length) {
+    const chunk = record.chunks[index]
+    if (chunk.tag === TAG_ENTITY_REF || chunk.type === 'entity_ref') {
+      const ref = chunk.record || chunk
+      if (expectedName !== null && ref !== null && ref.name && !ref.name.endsWith(expectedName)) {
+        // Type mismatch - but don't throw, just warn
+        // console.warn(`Expected ${expectedName} but found ${ref.name}`)
+      }
+      return [ref, index + 1]
     }
-    return [ref, index + 1]
+    // Skip TAG_LONG, TAG_DOUBLE, etc. (extra fields in ASM format)
+    if (chunk.tag === TAG_LONG || chunk.tag === TAG_DOUBLE || chunk.tag === TAG_SHORT ||
+        chunk.tag === TAG_FLOAT || chunk.tag === TAG_CHAR) {
+      index++
+      continue
+    }
+    // Stop at terminator or other non-numeric tags
+    break
   }
-  throw new Error(`Chunk at index=${index} is not a reference`)
+  // Return null reference if we couldn't find one
+  return [null, index]
 }
 
 /**

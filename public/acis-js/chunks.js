@@ -37,8 +37,9 @@ export function getSInt16(data, offset) {
 }
 
 export function getUInt32(data, offset) {
+  // Need parentheses to apply >>> 0 to the whole expression, not just the last term
   return [
-    data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24) >>> 0,
+    (data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24)) >>> 0,
     offset + 4
   ]
 }
@@ -441,11 +442,24 @@ export function createChunk(tag, data, offset, scale = 1.0) {
     return [chunk, o1]
   }
   if (tag === TAG_ENUM_VALUE) {
-    const chunk = new AcisChunkUtf8U8()
-    const o1 = chunk.read(data, offset)
-    chunk.tag = TAG_ENUM_VALUE
-    chunk.type = 'enum'
-    return [chunk, o1]
+    // In 64-bit mode, enum values are stored as 64-bit integers
+    // Otherwise as UTF8 strings
+    const reader = getReader()
+    if (reader && reader._getSLong === getSInt64) {
+      // 64-bit mode: read as integer
+      const [val, o1] = getSLong(data, offset)
+      const chunk = new AcisChunkLong(val)
+      chunk.tag = TAG_ENUM_VALUE
+      chunk.type = 'enum'
+      return [chunk, o1]
+    } else {
+      // 32-bit mode: read as string
+      const chunk = new AcisChunkUtf8U8()
+      const o1 = chunk.read(data, offset)
+      chunk.tag = TAG_ENUM_VALUE
+      chunk.type = 'enum'
+      return [chunk, o1]
+    }
   }
   if (tag === TAG_POSITION) {
     const chunk = new AcisChunkPosition(scale)
