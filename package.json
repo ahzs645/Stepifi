@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:acis": "node scripts/build-acis-bundle.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.117.0",
