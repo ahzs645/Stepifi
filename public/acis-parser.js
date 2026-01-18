@@ -65,7 +65,13 @@ class ACISBinaryReader {
   }
 
   readBytes(count) {
-    const bytes = new Uint8Array(this.buffer, this.offset, count)
+    // Bounds check
+    if (this.offset + count > this.buffer.byteLength) {
+      const available = this.buffer.byteLength - this.offset
+      console.warn(`readBytes: requested ${count} bytes but only ${available} available`)
+      count = available
+    }
+    const bytes = new Uint8Array(this.buffer.buffer, this.buffer.byteOffset + this.offset, count)
     this.offset += count
     return bytes
   }
@@ -129,12 +135,26 @@ class ACISBinaryReader {
 
   readString() {
     const length = this.readByte()
+    if (length === 0) return ''
+    if (length > 200) {
+      // Suspiciously long string for an identifier
+      console.warn(`Suspicious string length ${length} at offset ${this.offset - 1}`)
+      return `<invalid_len_${length}>`
+    }
     const bytes = this.readBytes(length)
     return new TextDecoder().decode(bytes)
   }
 
   readLongString() {
     const length = this.readUInt32()
+    if (length === 0) return ''
+    // Cap at 1MB to prevent memory issues
+    if (length > 1024 * 1024) {
+      console.warn(`String length ${length} exceeds limit at offset ${this.offset - 4}`)
+      // Skip the bytes but don't try to decode
+      this.offset += Math.min(length, this.buffer.byteLength - this.offset)
+      return `<string_too_long_${length}>`
+    }
     const bytes = this.readBytes(length)
     return new TextDecoder().decode(bytes)
   }
@@ -339,17 +359,75 @@ function parseACISShell(entity, entityMap) {
     faces: []
   }
 
+  // Shell has a reference to the first face in a circular linked list
+  // Find the first face reference
+  let firstFaceId = null
   for (const chunk of entity.data) {
-    if (chunk.type === 'entity_ref') {
+    if (chunk.type === 'entity_ref' && chunk.id >= 0) {
       const ref = entityMap.get(chunk.id)
       if (ref && ref.type === 'face') {
-        const face = parseACISFace(ref, entityMap)
-        if (face) shell.faces.push(face)
+        firstFaceId = chunk.id
+        break
       }
     }
   }
 
+  if (firstFaceId === null) return shell
+
+  // Follow the circular face linked list
+  const visitedFaces = new Set()
+  let currentFaceId = firstFaceId
+
+  while (currentFaceId !== null && currentFaceId >= 0 && !visitedFaces.has(currentFaceId)) {
+    visitedFaces.add(currentFaceId)
+
+    const faceEntity = entityMap.get(currentFaceId)
+    if (!faceEntity || faceEntity.type !== 'face') break
+
+    const face = parseACISFace(faceEntity, entityMap, shell.id)
+    if (face) shell.faces.push(face)
+
+    // Find next face - it's the first face reference in the data
+    currentFaceId = findNextFaceInCircularList(faceEntity, entityMap, firstFaceId, visitedFaces)
+  }
+
   return shell
+}
+
+// Helper to find next face in circular linked list
+function findNextFaceInCircularList(entity, entityMap, firstFaceId, visited) {
+  // Face record structure: attrib, long, null, NEXT_FACE, loop, shell, null, surface
+  // The first face reference is the "next" pointer
+  for (const chunk of entity.data) {
+    if (chunk.type === 'entity_ref' && chunk.id >= 0) {
+      const ref = entityMap.get(chunk.id)
+      if (ref && ref.type === 'face') {
+        // Return this face if we haven't visited it yet
+        if (!visited.has(chunk.id)) {
+          return chunk.id
+        }
+        // If we've wrapped around to the first face, stop
+        if (chunk.id === firstFaceId) {
+          return null
+        }
+      }
+    }
+  }
+  return null
+}
+
+// Helper to find next element in a linked list, excluding back-references
+function findNextInList(entity, entityMap, targetType, parentId) {
+  // In ACIS, linked lists are stored with next pointer early in the record
+  for (const chunk of entity.data) {
+    if (chunk.type === 'entity_ref' && chunk.id >= 0) {
+      const ref = entityMap.get(chunk.id)
+      if (ref && ref.type === targetType && chunk.id !== entity.id) {
+        return chunk.id
+      }
+    }
+  }
+  return null
 }
 
 // Surface types that can be referenced by faces
@@ -370,7 +448,7 @@ const CURVE_TYPES = new Set([
   'spline', 'spline-curve'
 ])
 
-function parseACISFace(entity, entityMap) {
+function parseACISFace(entity, entityMap, shellId) {
   const face = {
     type: 'face',
     id: entity.id,
@@ -379,43 +457,104 @@ function parseACISFace(entity, entityMap) {
     sense: true
   }
 
+  // Find first loop reference and surface
+  let firstLoopId = null
   for (const chunk of entity.data) {
     if (chunk.type === 'entity_ref' && chunk.id >= 0) {
       const ref = entityMap.get(chunk.id)
       if (ref) {
-        if (ref.type === 'loop') {
-          const loop = parseACISLoop(ref, entityMap)
-          if (loop) face.loops.push(loop)
+        if (ref.type === 'loop' && firstLoopId === null) {
+          firstLoopId = chunk.id
         } else if (SURFACE_TYPES.has(ref.type)) {
           face.surface = parseACISSurface(ref, entityMap)
         }
+      }
+    } else if (chunk.type === 'bool') {
+      // Sense is stored as boolean in some ACIS versions
+      if (chunk.value !== undefined) {
+        face.sense = chunk.value
       }
     } else if (chunk.type === 'ident' && (chunk.value === 'forward' || chunk.value === 'reversed')) {
       face.sense = chunk.value === 'forward'
     }
   }
 
+  // Follow loop linked list
+  const visitedLoops = new Set()
+  let currentLoopId = firstLoopId
+
+  while (currentLoopId !== null && currentLoopId >= 0 && !visitedLoops.has(currentLoopId)) {
+    visitedLoops.add(currentLoopId)
+
+    const loopEntity = entityMap.get(currentLoopId)
+    if (!loopEntity || loopEntity.type !== 'loop') break
+
+    const loop = parseACISLoop(loopEntity, entityMap, face.id)
+    if (loop) face.loops.push(loop)
+
+    // Find next loop
+    currentLoopId = findNextInList(loopEntity, entityMap, 'loop', face.id)
+  }
+
   return face
 }
 
-function parseACISLoop(entity, entityMap) {
+function parseACISLoop(entity, entityMap, faceId) {
   const loop = {
     type: 'loop',
     id: entity.id,
     coedges: []
   }
 
+  // Find first coedge reference
+  let firstCoedgeId = null
   for (const chunk of entity.data) {
-    if (chunk.type === 'entity_ref') {
+    if (chunk.type === 'entity_ref' && chunk.id >= 0) {
       const ref = entityMap.get(chunk.id)
       if (ref && ref.type === 'coedge') {
-        const coedge = parseACISCoedge(ref, entityMap)
-        if (coedge) loop.coedges.push(coedge)
+        firstCoedgeId = chunk.id
+        break
       }
     }
   }
 
+  // Follow coedge linked list (coedges form a circular list within a loop)
+  const visitedCoedges = new Set()
+  let currentCoedgeId = firstCoedgeId
+
+  while (currentCoedgeId !== null && currentCoedgeId >= 0 && !visitedCoedges.has(currentCoedgeId)) {
+    visitedCoedges.add(currentCoedgeId)
+
+    const coedgeEntity = entityMap.get(currentCoedgeId)
+    if (!coedgeEntity || coedgeEntity.type !== 'coedge') break
+
+    const coedge = parseACISCoedge(coedgeEntity, entityMap)
+    if (coedge) loop.coedges.push(coedge)
+
+    // Find next coedge (coedges typically have next-coedge as first coedge ref)
+    currentCoedgeId = findNextCoedge(coedgeEntity, entityMap, firstCoedgeId)
+  }
+
   return loop
+}
+
+// Helper to find next coedge in the circular list
+function findNextCoedge(entity, entityMap, firstCoedgeId) {
+  // Coedge structure: next-coedge, prev-coedge, partner, edge, loop
+  // The first coedge ref is usually the next coedge
+  for (const chunk of entity.data) {
+    if (chunk.type === 'entity_ref' && chunk.id >= 0) {
+      const ref = entityMap.get(chunk.id)
+      if (ref && ref.type === 'coedge' && chunk.id !== entity.id) {
+        // Return the next coedge, but stop if we've wrapped around
+        if (chunk.id === firstCoedgeId) {
+          return null  // Completed the loop
+        }
+        return chunk.id
+      }
+    }
+  }
+  return null
 }
 
 function parseACISCoedge(entity, entityMap) {
@@ -423,13 +562,11 @@ function parseACISCoedge(entity, entityMap) {
     type: 'coedge',
     id: entity.id,
     edge: null,
-    sense: true,
-    nextCoedge: null,
-    prevCoedge: null
+    sense: true
   }
 
   for (const chunk of entity.data) {
-    if (chunk.type === 'entity_ref') {
+    if (chunk.type === 'entity_ref' && chunk.id >= 0) {
       const ref = entityMap.get(chunk.id)
       if (ref && ref.type === 'edge') {
         coedge.edge = parseACISEdge(ref, entityMap)
