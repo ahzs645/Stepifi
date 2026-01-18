@@ -58,16 +58,19 @@ export class Entity {
 
   /**
    * Set entity data from record
+   * Based on Acis.py Entity.set() lines 1535-1546
    */
   set(record) {
     let i = 0
 
-    // Handle attrib reference
-    if (record.chunks.length > 0) {
-      const firstChunk = record.chunks[0]
-      if (firstChunk.tag === TAG_ENTITY_REF || firstChunk.type === 'entity_ref') {
-        [this._attrib, i] = getRefNode(record, 0, 'attrib')
-      }
+    // Handle attrib reference - use null for expected name to accept any ref
+    ;[this._attrib, i] = getRefNode(record, i, null)
+
+    // Read history integer if version > 6.0
+    if (getVersion() > 6.0 && i < record.chunks.length) {
+      ;[this.history, i] = getInteger(record.chunks, i)
+    } else {
+      this.history = -1
     }
 
     return i

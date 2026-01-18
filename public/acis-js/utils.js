@@ -7,7 +7,7 @@
 import {
   TAG_TRUE, TAG_FALSE, TAG_UTF8_U8, TAG_DOUBLE, TAG_ENTITY_REF,
   TAG_POSITION, TAG_VECTOR_3D, TAG_ENUM_VALUE, TAG_LONG, TAG_FLOAT,
-  TAG_TERMINATOR, TAG_IDENT, TAG_SUBIDENT,
+  TAG_TERMINATOR, TAG_IDENT, TAG_SUBIDENT, TAG_SHORT, TAG_CHAR,
   RANGE, SENSE, SENSEV, SIDES, SIDE, BOOLEAN, CLOSURE, SINGULARITY,
   MIN_INF, MAX_INF, MIN_0, MAX_2PI
 } from './constants.js'
@@ -74,18 +74,34 @@ export function getValue(chunks, index) {
 
 /**
  * Get entity reference from chunk
+ * Matches Python Acis.py getRefNode() function behavior
  */
 export function getRefNode(record, index, expectedName = null) {
+  if (index >= record.chunks.length) {
+    return [null, index]
+  }
+
   const chunk = record.chunks[index]
+
   if (chunk.tag === TAG_ENTITY_REF || chunk.type === 'entity_ref') {
     const ref = chunk.record || chunk
-    if (expectedName !== null && ref !== null && ref.name && !ref.name.endsWith(expectedName)) {
-      // Type mismatch - but don't throw, just warn
-      // console.warn(`Expected ${expectedName} but found ${ref.name}`)
+
+    // If null ref (-1), return null
+    if (chunk.val === -1 || ref === null || !ref.name) {
+      return [null, index + 1]
     }
+
+    // If expectedName provided, check if ref matches
+    if (expectedName !== null && !ref.name.endsWith(expectedName)) {
+      // Python raises exception here, but we'll be lenient and just warn
+      // console.warn(`Expected ${expectedName} but found ${ref.name} at index ${index}`)
+    }
+
     return [ref, index + 1]
   }
-  throw new Error(`Chunk at index=${index} is not a reference`)
+
+  // Not an entity ref - return null (Python would raise exception)
+  return [null, index]
 }
 
 /**

@@ -375,7 +375,8 @@ export class AcisReader {
       return new AcisChunkEnumValue(tag, tag === TAG_TRUE, BOOLEAN)
     }
 
-    const [chunk, pos2] = createChunk(tag, this._data, this._pos, this.header.scale)
+    const is64bit = this._getSLong === getSInt64
+    const [chunk, pos2] = createChunk(tag, this._data, this._pos, this.header.scale, is64bit)
     this._pos = pos2
     return chunk
   }
@@ -389,6 +390,12 @@ export class AcisReader {
 
     if (this.header.format.startsWith('ACIS BinaryFile') ||
         this.header.format.startsWith('ASM BinaryFile')) {
+      // Check for ASM format
+      if (this.header.format.startsWith('ASM BinaryFile')) {
+        // Set asm to indicate ASM format (version tuple will be read from asmheader record later)
+        this.header.asm = [0, 0, 0, 0] // Placeholder, will be updated when asmheader is parsed
+      }
+
       // Check for 64-bit mode
       if (this.header.format.endsWith('8')) {
         this._getSLong = getSInt64

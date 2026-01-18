@@ -17,6 +17,7 @@ import {
 
 /**
  * Base class for topology entities
+ * Based on Acis.py Topology class and _handle_topology_DEFAULT function
  */
 export class Topology extends Entity {
   constructor() {
@@ -25,6 +26,18 @@ export class Topology extends Entity {
 
   set(record) {
     let i = super.set(record)
+
+    // _handle_topology_DEFAULT logic from Acis.py lines 187-192
+    const vrs = getVersion()
+    // Skip extra field for non-ASM format when version > 10.0
+    if (vrs > 10.0 && !isASM()) {
+      i++
+    }
+    // Skip another field for version > 6.0
+    if (vrs > 6.0) {
+      i++
+    }
+
     return i
   }
 }

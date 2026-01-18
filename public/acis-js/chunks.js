@@ -423,7 +423,7 @@ export const ACIS_VALUE_CHUNKS = {
 // Factory function to create chunk from tag
 // ============================================================================
 
-export function createChunk(tag, data, offset, scale = 1.0) {
+export function createChunk(tag, data, offset, scale = 1.0, is64bit = false) {
   if (tag === TAG_TRUE) {
     return [new AcisChunkEnumValue(TAG_TRUE, true, BOOLEAN), offset]
   }
@@ -436,10 +436,30 @@ export function createChunk(tag, data, offset, scale = 1.0) {
     return [chunk, o1]
   }
   if (tag === TAG_ENUM_VALUE) {
+    // In 64-bit mode, enum value is stored as 64-bit integer, not UTF8 string
+    if (is64bit) {
+      const [val, o1] = getSInt64(data, offset)
+      const chunk = new AcisChunk(TAG_ENUM_VALUE, val)
+      chunk.type = 'enum'
+      return [chunk, o1]
+    }
     const chunk = new AcisChunkUtf8U8()
     const o1 = chunk.read(data, offset)
     chunk.tag = TAG_ENUM_VALUE
     chunk.type = 'enum'
+    return [chunk, o1]
+  }
+  if (tag === TAG_LONG) {
+    // In 64-bit mode, TAG_LONG is 8 bytes, otherwise 4 bytes
+    if (is64bit) {
+      const [val, o1] = getSInt64(data, offset)
+      const chunk = new AcisChunkLong(val)
+      chunk.val = val
+      chunk.value = val
+      return [chunk, o1]
+    }
+    const chunk = new AcisChunkLong()
+    const o1 = chunk.read(data, offset)
     return [chunk, o1]
   }
   if (tag === TAG_POSITION) {
