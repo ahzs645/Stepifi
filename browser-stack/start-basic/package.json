@@ -14,6 +14,7 @@
     "@react-three/fiber": "^8.17.0",
     "@tanstack/react-router": "^1.151.1",
     "@tanstack/react-start": "^1.151.1",
+    "jszip": "^3.10.1",
     "opencascade.js": "^2.0.0-beta.c301f5e",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
+    "@types/jszip": "^3.4.0",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

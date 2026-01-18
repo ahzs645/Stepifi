@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useCallback, Suspense, lazy } from 'react'
+import type { ConversionOptions, MeshStats } from '~/lib/converter'
 
-const StlViewer = lazy(() => import('~/components/StlViewer'))
+const MeshViewer = lazy(() => import('~/components/MeshViewer'))
 
 export const Route = createFileRoute('/')({
   component: Home,
@@ -10,25 +11,80 @@ export const Route = createFileRoute('/')({
 type ConversionStatus = 'idle' | 'loading-occt' | 'converting' | 'done' | 'error'
 
 interface ConversionResult {
-  stepBlob: Blob | null
+  blob: Blob | null
   fileName: string
+  format: 'step' | 'stl'
   error?: string
+}
+
+function formatNumber(num: number): string {
+  return num.toLocaleString()
+}
+
+function StatsColumn({ title, stats, color }: { title: string; stats: MeshStats; color: 'blue' | 'green' }) {
+  const borderColor = color === 'blue' ? 'border-blue-600' : 'border-green-600'
+  const bgColor = color === 'blue' ? 'bg-blue-900/20' : 'bg-green-900/20'
+  const textColor = color === 'blue' ? 'text-blue-400' : 'text-green-400'
+
+  return (
+    <div className={`p-4 rounded-lg border ${borderColor} ${bgColor}`}>
+      <h4 className={`text-sm font-semibold ${textColor} mb-3`}>{title}</h4>
+      <div className="space-y-2 text-sm">
+        {stats.faceCount !== undefined && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Faces:</span>
+            <span className="text-gray-200 font-mono">{formatNumber(stats.faceCount)}</span>
+          </div>
+        )}
+        {stats.surfaceArea !== undefined && stats.surfaceArea > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Surface:</span>
+            <span className="text-gray-200 font-mono">{stats.surfaceArea.toFixed(2)} mm²</span>
+          </div>
+        )}
+        {stats.volume !== undefined && stats.volume > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Volume:</span>
+            <span className="text-gray-200 font-mono">{stats.volume.toFixed(2)} mm³</span>
+          </div>
+        )}
+        {stats.boundingBox && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Size:</span>
+            <span className="text-gray-200 font-mono text-xs">
+              {stats.boundingBox.size.x.toFixed(1)} × {stats.boundingBox.size.y.toFixed(1)} × {stats.boundingBox.size.z.toFixed(1)}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function Home() {
   const [status, setStatus] = useState<ConversionStatus>('idle')
   const [progress, setProgress] = useState('')
-  const [stlData, setStlData] = useState<ArrayBuffer | null>(null)
+  const [fileData, setFileData] = useState<ArrayBuffer | null>(null)
   const [result, setResult] = useState<ConversionResult | null>(null)
   const [fileName, setFileName] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [beforeStats, setBeforeStats] = useState<MeshStats | null>(null)
+  const [afterStats, setAfterStats] = useState<MeshStats | null>(null)
+
+  // Conversion options
+  const [outputFormat, setOutputFormat] = useState<'step' | 'stl'>('step')
+  const [tolerance, setTolerance] = useState(0.1)
+  const [repair, setRepair] = useState(true)
+  const [mergeFaces, setMergeFaces] = useState(true)
 
   const processFile = useCallback(async (file: File) => {
     setFileName(file.name)
     setStatus('idle')
     setResult(null)
+    setBeforeStats(null)
+    setAfterStats(null)
     const arrayBuffer = await file.arrayBuffer()
-    setStlData(arrayBuffer)
+    setFileData(arrayBuffer)
   }, [])
 
   const handleFileSelect = useCallback(
@@ -72,45 +128,66 @@ function Home() {
   )
 
   const handleConvert = useCallback(async () => {
-    if (!stlData || !fileName) return
+    if (!fileData || !fileName) return
 
     setStatus('loading-occt')
     setProgress('Loading OpenCascade.js (~9MB)...')
+    setBeforeStats(null)
+    setAfterStats(null)
 
     try {
-      const { convertStlToStep } = await import('~/lib/converter')
+      const { convertFile } = await import('~/lib/converter')
 
       setStatus('converting')
-      setProgress('Converting STL to STEP...')
+      setProgress('Converting...')
 
-      const stepData = await convertStlToStep(stlData, (msg) => {
-        setProgress(msg)
-      })
+      const options: ConversionOptions = {
+        outputFormat,
+        tolerance,
+        repair,
+        mergeFaces,
+      }
 
-      const stepBlob = new Blob([stepData], { type: 'application/step' })
+      const conversionResult = await convertFile(
+        fileData,
+        fileName,
+        options,
+        (msg) => setProgress(msg),
+        (stats) => setBeforeStats(stats),
+        (stats) => setAfterStats(stats),
+      )
+
+      const mimeType = conversionResult.format === 'step' ? 'application/step' : 'model/stl'
+      const blob = new Blob([new Uint8Array(conversionResult.data).buffer as ArrayBuffer], { type: mimeType })
       const baseName = fileName.replace(/\.(stl|3mf)$/i, '')
 
+      // Update stats from result if available
+      if (conversionResult.beforeStats) setBeforeStats(conversionResult.beforeStats)
+      if (conversionResult.afterStats) setAfterStats(conversionResult.afterStats)
+
       setResult({
-        stepBlob,
-        fileName: `${baseName}.step`,
+        blob,
+        fileName: `${baseName}.${conversionResult.format}`,
+        format: conversionResult.format,
       })
       setStatus('done')
       setProgress('Conversion complete!')
     } catch (err) {
       setStatus('error')
       setResult({
-        stepBlob: null,
+        blob: null,
         fileName: '',
+        format: 'step',
         error: err instanceof Error ? err.message : 'Unknown error',
       })
       setProgress('')
     }
-  }, [stlData, fileName])
+  }, [fileData, fileName, outputFormat, tolerance, repair, mergeFaces])
 
   const handleDownload = useCallback(() => {
-    if (!result?.stepBlob) return
+    if (!result?.blob) return
 
-    const url = URL.createObjectURL(result.stepBlob)
+    const url = URL.createObjectURL(result.blob)
     const a = document.createElement('a')
     a.href = url
     a.download = result.fileName
@@ -118,19 +195,25 @@ function Home() {
     URL.revokeObjectURL(url)
   }, [result])
 
+  // Calculate face reduction percentage
+  const faceReduction = beforeStats?.faceCount && afterStats?.faceCount
+    ? ((beforeStats.faceCount - afterStats.faceCount) / beforeStats.faceCount * 100).toFixed(1)
+    : null
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
       <header className="text-center py-8 border-b border-gray-800">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
           Stepifi
         </h1>
-        <p className="text-gray-400 mt-2">Browser-based STL to STEP converter</p>
+        <p className="text-gray-400 mt-2">Browser-based STL/3MF to STEP/STL converter</p>
         <p className="text-gray-500 text-sm mt-1">
           Powered by OpenCascade.js - runs entirely in your browser
         </p>
       </header>
 
-      <main className="flex-1 p-8 max-w-3xl mx-auto w-full">
+      <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
+        {/* File Upload */}
         <div className="mb-8">
           <label
             className="block cursor-pointer"
@@ -157,7 +240,7 @@ function Home() {
                 <>
                   <span className="text-3xl block mb-2">📁</span>
                   <span className="text-gray-400">
-                    Drop STL file here or click to browse
+                    Drop STL or 3MF file here or click to browse
                   </span>
                 </>
               )}
@@ -165,7 +248,8 @@ function Home() {
           </label>
         </div>
 
-        {stlData && (
+        {/* 3D Preview */}
+        {fileData && (
           <div className="mb-8">
             <h3 className="text-sm font-semibold text-gray-400 mb-3">Preview</h3>
             <div className="h-72 rounded-xl overflow-hidden bg-gray-900 border border-gray-800">
@@ -176,41 +260,173 @@ function Home() {
                   </div>
                 }
               >
-                <StlViewer stlData={stlData} />
+                <MeshViewer fileData={fileData} fileName={fileName} />
               </Suspense>
             </div>
           </div>
         )}
 
-        {stlData && status !== 'done' && (
+        {/* Before/After Mesh Analysis */}
+        {(beforeStats || afterStats) && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-400">Mesh Analysis</h3>
+              {faceReduction && parseFloat(faceReduction) > 0 && (
+                <span className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded-full">
+                  {faceReduction}% face reduction
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {beforeStats && (
+                <StatsColumn title="Before (Input)" stats={beforeStats} color="blue" />
+              )}
+              {afterStats && (
+                <StatsColumn title="After (Output)" stats={afterStats} color="green" />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Conversion Options */}
+        {fileData && status !== 'done' && (
+          <div className="mb-8 p-4 bg-gray-900 border border-gray-800 rounded-xl">
+            <h3 className="text-sm font-semibold text-gray-400 mb-4">Conversion Options</h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Output Format */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Output Format</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setOutputFormat('step')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                      outputFormat === 'step'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                  >
+                    STEP
+                  </button>
+                  <button
+                    onClick={() => setOutputFormat('stl')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                      outputFormat === 'stl'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                  >
+                    STL
+                  </button>
+                </div>
+              </div>
+
+              {/* Tolerance */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Tolerance: {tolerance.toFixed(2)}
+                </label>
+                <input
+                  type="range"
+                  min="0.01"
+                  max="1"
+                  step="0.01"
+                  value={tolerance}
+                  onChange={(e) => setTolerance(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>Fine (0.01)</span>
+                  <span>Coarse (1.0)</span>
+                </div>
+              </div>
+
+              {/* Repair Toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm text-gray-300">Mesh Repair</label>
+                  <p className="text-xs text-gray-500">Fix common mesh issues</p>
+                </div>
+                <button
+                  onClick={() => setRepair(!repair)}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    repair ? 'bg-indigo-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full transition-transform ${
+                      repair ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Merge Faces Toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm text-gray-300">Merge Faces</label>
+                  <p className="text-xs text-gray-500">Combine coplanar faces</p>
+                </div>
+                <button
+                  onClick={() => setMergeFaces(!mergeFaces)}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    mergeFaces ? 'bg-indigo-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full transition-transform ${
+                      mergeFaces ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Convert Button */}
+        {fileData && status !== 'done' && (
           <button
             onClick={handleConvert}
             disabled={status === 'loading-occt' || status === 'converting'}
             className="w-full py-4 px-6 text-lg font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {status === 'idle' || status === 'error'
-              ? 'Convert to STEP'
+              ? `Convert to ${outputFormat.toUpperCase()}`
               : progress}
           </button>
         )}
 
+        {/* Error Display */}
         {status === 'error' && result?.error && (
           <div className="mt-4 p-4 bg-red-900/30 border border-red-800 rounded-lg text-red-400">
             <strong>Error:</strong> {result.error}
           </div>
         )}
 
-        {status === 'done' && result?.stepBlob && (
+        {/* Success & Download */}
+        {status === 'done' && result?.blob && (
           <div className="mt-4">
             <div className="p-4 bg-green-900/30 border border-green-800 rounded-lg text-green-400 mb-4">
               Conversion successful! File size:{' '}
-              {(result.stepBlob.size / 1024).toFixed(1)} KB
+              {(result.blob.size / 1024).toFixed(1)} KB
             </div>
             <button
               onClick={handleDownload}
               className="w-full py-4 px-6 text-lg font-semibold text-white bg-green-600 rounded-lg hover:bg-green-500 transition-colors"
             >
               Download {result.fileName}
+            </button>
+            <button
+              onClick={() => {
+                setStatus('idle')
+                setResult(null)
+                setBeforeStats(null)
+                setAfterStats(null)
+              }}
+              className="w-full mt-2 py-3 px-6 text-sm font-medium text-gray-400 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Convert Another File
             </button>
           </div>
         )}
