@@ -1,12 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { useState, useCallback, Suspense, lazy } from 'react'
 import type { ConversionOptions, MeshStats } from '~/lib/converter'
 
 const MeshViewer = lazy(() => import('~/components/MeshViewer'))
-
-export const Route = createFileRoute('/')({
-  component: Home,
-})
 
 type ConversionStatus = 'idle' | 'loading-occt' | 'converting' | 'analyzing' | 'analyzed' | 'done' | 'error'
 
@@ -137,7 +132,7 @@ function StatsColumn({ title, stats, color }: { title: string; stats: MeshStats;
   )
 }
 
-function Home() {
+export default function App() {
   const [status, setStatus] = useState<ConversionStatus>('idle')
   const [progress, setProgress] = useState('')
   const [fileData, setFileData] = useState<ArrayBuffer | null>(null)

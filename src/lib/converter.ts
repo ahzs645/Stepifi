@@ -7,7 +7,9 @@ let worker: Worker | null = null
 
 function getWorker(): Worker {
   if (!worker) {
-    worker = new Worker('/converter.worker.js')
+    // Use import.meta.env.BASE_URL for correct path in GitHub Pages
+    const base = import.meta.env.BASE_URL || '/'
+    worker = new Worker(`${base}converter.worker.js`)
   }
   return worker
 }
