@@ -12,6 +12,7 @@ import {
   TAG_POSITION, TAG_VECTOR_3D, TAG_ENUM_VALUE, TAG_VECTOR_2D,
   TAG_INT64, BOOLEAN
 } from './constants.js'
+import { getReader } from './utils.js'
 
 // ============================================================================
 // Binary Reading Helpers
@@ -423,6 +424,10 @@ export const ACIS_VALUE_CHUNKS = {
 // ============================================================================
 
 export function createChunk(tag, data, offset, scale = 1.0) {
+  // Get the reader to check for 64-bit mode
+  const reader = getReader()
+  const getSLong = reader ? reader._getSLong : getSInt32
+
   if (tag === TAG_TRUE) {
     return [new AcisChunkEnumValue(TAG_TRUE, true, BOOLEAN), offset]
   }
@@ -430,7 +435,8 @@ export function createChunk(tag, data, offset, scale = 1.0) {
     return [new AcisChunkEnumValue(TAG_FALSE, false, BOOLEAN), offset]
   }
   if (tag === TAG_ENTITY_REF) {
-    const [val, o1] = getSInt64(data, offset)
+    // Entity refs use the current long size (32 or 64 bit)
+    const [val, o1] = getSLong(data, offset)
     const chunk = new AcisChunkEntityRef(val)
     return [chunk, o1]
   }
@@ -444,6 +450,12 @@ export function createChunk(tag, data, offset, scale = 1.0) {
   if (tag === TAG_POSITION) {
     const chunk = new AcisChunkPosition(scale)
     const o1 = chunk.read(data, offset)
+    return [chunk, o1]
+  }
+  // TAG_LONG uses the current long size (32 or 64 bit based on file format)
+  if (tag === TAG_LONG) {
+    const [val, o1] = getSLong(data, offset)
+    const chunk = new AcisChunkLong(val)
     return [chunk, o1]
   }
 

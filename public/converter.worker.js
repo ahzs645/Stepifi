@@ -12,11 +12,9 @@ const WORKER_BASE_PATH = (() => {
   return url.substring(0, url.lastIndexOf('/') + 1)
 })()
 
-// Load F3D/ACIS support modules (if they exist)
+// Load F3D/ACIS support modules (new bundle + geometry)
 try {
-  importScripts(WORKER_BASE_PATH + 'acis-bundle.js')
-  // Also load geometry converter
-  importScripts(WORKER_BASE_PATH + 'acis-geometry.js')
+  importScripts(WORKER_BASE_PATH + 'acis-bundle.js', WORKER_BASE_PATH + 'acis-geometry.js')
 } catch (e) {
   // ACIS modules are optional - F3D support will be disabled
   console.log('ACIS modules not loaded (F3D support disabled):', e.message)

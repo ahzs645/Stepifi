@@ -6,7 +6,7 @@
 
 import {
   TAG_TRUE, TAG_FALSE, TAG_ENTITY_REF, TAG_IDENT, TAG_SUBIDENT, TAG_TERMINATOR,
-  TOKEN_TRANSLATIONS, BOOLEAN
+  TAG_UTF8_U8, TOKEN_TRANSLATIONS, BOOLEAN
 } from './constants.js'
 import {
   ACIS_VALUE_CHUNKS, AcisChunkEntityRef, AcisChunkEnumValue,
@@ -389,36 +389,69 @@ export class AcisReader {
 
     if (this.header.format.startsWith('ACIS BinaryFile') ||
         this.header.format.startsWith('ASM BinaryFile')) {
-      // Check for 64-bit mode
+      // Check for 64-bit mode (format ends with '8')
       if (this.header.format.endsWith('8')) {
         this._getSLong = getSInt64
         this._getULong = getUInt64
       }
 
-      const [version, p1] = this._getULong(this._data, 15)
-      const [records, p2] = this._getULong(this._data, p1)
-      const [bodies, p3] = this._getULong(this._data, p2)
-      const [flags, p4] = this._getULong(this._data, p3)
-
-      this.header.version = int2version(version)
-      this.header.records = records
-      this.header.bodies = bodies
-      this.header.flags = flags
-
-      this._pos = p4
-
-      // Read product info
-      this.header.prodId = this._readChunkBinary().val
-      this.header.prodVer = this._readChunkBinary().val
-      this.header.date = this._readChunkBinary().val
-      this.header.scale = this._readChunkBinary().val
-      this.header.resabs = this._readChunkBinary().val
-      this.header.resnor = this._readChunkBinary().val
-
-      return true
+      // Find the first TAG_IDENT (0x0d) which marks the start of ACIS records
+      // This is more reliable than parsing header fields which vary by format
+      for (let i = 16; i < Math.min(512, this._length - 10); i++) {
+        if (this._data[i] === TAG_IDENT) {
+          // Check if next bytes look like a valid identifier (length + ASCII letters)
+          const len = this._data[i + 1]
+          if (len > 0 && len < 64 && i + 2 + len <= this._length) {
+            let valid = true
+            for (let j = 0; j < len; j++) {
+              const c = this._data[i + 2 + j]
+              // Allow letters (A-Z, a-z), digits (0-9), underscore, hyphen
+              if (!((c >= 65 && c <= 90) || (c >= 97 && c <= 122) ||
+                    c === 95 || (c >= 48 && c <= 57) || c === 45)) {
+                valid = false
+                break
+              }
+            }
+            if (valid) {
+              this._pos = i
+              // Try to read header fields from the asmheader record
+              this._readHeaderFromRecord()
+              return true
+            }
+          }
+        }
+      }
+      // Fallback: couldn't find record start
+      return false
     }
 
     return false
+  }
+
+  /**
+   * Read header info from the asmheader record
+   */
+  _readHeaderFromRecord() {
+    const startPos = this._pos
+    try {
+      const [record, _] = this._readRecordBinary(0)
+      if (record.name === 'asmheader' || record.name === 'ACIS-asmheader') {
+        // Extract version string from chunks
+        for (const chunk of record.chunks) {
+          if (chunk.tag === TAG_UTF8_U8 && typeof chunk.val === 'string') {
+            const match = chunk.val.match(/^(\d+)\.(\d+)\.(\d+)/)
+            if (match) {
+              this.header.version = parseFloat(match[1] + '.' + match[2])
+              this.header.asm = [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])]
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse asmheader:', e.message)
+    }
+    // Reset position to record start so readBinary can parse all records
+    this._pos = startPos
   }
 
   _readRecordBinary(index) {

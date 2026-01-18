@@ -393,10 +393,11 @@ function convertACISBody(oc, bodyEntity) {
   const shapes = []
 
   try {
-    const lumps = bodyEntity.getLumps ? bodyEntity.getLumps() : []
+    // Support both old parser (direct .lumps) and new entity classes (getLumps())
+    const lumps = bodyEntity.lumps || (bodyEntity.getLumps ? bodyEntity.getLumps() : [])
 
     for (const lump of lumps) {
-      const shells = lump.getShells ? lump.getShells() : []
+      const shells = lump.shells || (lump.getShells ? lump.getShells() : [])
 
       for (const shell of shells) {
         const ocShell = convertACISShell(oc, shell)
