@@ -71,8 +71,12 @@ function makeAx3(oc, origin, axis, refDir) {
 function convertACISSurface(oc, surface) {
   if (!surface) return null
 
+  // Normalize surface type (handle both "plane" and "plane-surface")
+  const surfaceType = surface.type
+  const normalizedType = surfaceType.endsWith('-surface') ? surfaceType : surfaceType + '-surface'
+
   try {
-    switch (surface.type) {
+    switch (normalizedType) {
       case 'plane-surface':
         return convertPlaneSurface(oc, surface)
 
@@ -194,8 +198,12 @@ function convertSplineSurface(oc, surface) {
 function convertACISCurve(oc, curve) {
   if (!curve) return null
 
+  // Normalize curve type (handle both "straight" and "straight-curve")
+  const curveType = curve.type
+  const normalizedType = curveType.endsWith('-curve') ? curveType : curveType + '-curve'
+
   try {
-    switch (curve.type) {
+    switch (normalizedType) {
       case 'straight-curve':
         return convertStraightCurve(oc, curve)
 

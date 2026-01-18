@@ -33,8 +33,16 @@ const ACIS_TAGS = {
 
 class ACISBinaryReader {
   constructor(buffer) {
-    this.buffer = buffer
-    this.view = new DataView(buffer)
+    // Handle both ArrayBuffer and Uint8Array
+    if (buffer instanceof Uint8Array) {
+      this.buffer = buffer
+      this.view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+    } else if (buffer instanceof ArrayBuffer) {
+      this.buffer = new Uint8Array(buffer)
+      this.view = new DataView(buffer)
+    } else {
+      throw new Error('ACISBinaryReader requires ArrayBuffer or Uint8Array')
+    }
     this.offset = 0
     this.entities = new Map()
     this.entityList = []
@@ -92,6 +100,17 @@ class ACISBinaryReader {
     return val
   }
 
+  readInt64() {
+    // Read as two 32-bit values (JS doesn't have native 64-bit int)
+    const lo = this.view.getUint32(this.offset, true)
+    const hi = this.view.getInt32(this.offset + 4, true)
+    this.offset += 8
+    // For entity refs, -1 is common (0xffffffffffffffff)
+    if (lo === 0xffffffff && hi === -1) return -1
+    // Return as Number (may lose precision for very large values)
+    return hi * 0x100000000 + lo
+  }
+
   readPosition() {
     return {
       x: this.readFloat64(),
@@ -134,7 +153,8 @@ class ACISBinaryReader {
         return { type: 'short', value: this.readInt16() }
 
       case ACIS_TAGS.TAG_LONG:
-        return { type: 'long', value: this.readInt32() }
+        // ACIS binary uses 64-bit integers
+        return { type: 'long', value: this.readInt64() }
 
       case ACIS_TAGS.TAG_FLOAT:
         return { type: 'float', value: this.readFloat32() }
@@ -155,7 +175,8 @@ class ACISBinaryReader {
         return { type: 'bool', value: false }
 
       case ACIS_TAGS.TAG_ENTITY_REF: {
-        const id = this.readInt32()
+        // ACIS binary uses 64-bit entity refs
+        const id = this.readInt64()
         return { type: 'entity_ref', id }
       }
 
@@ -331,6 +352,24 @@ function parseACISShell(entity, entityMap) {
   return shell
 }
 
+// Surface types that can be referenced by faces
+const SURFACE_TYPES = new Set([
+  'plane', 'plane-surface',
+  'cone', 'cone-surface',
+  'cylinder', 'cylinder-surface',
+  'sphere', 'sphere-surface',
+  'torus', 'torus-surface',
+  'spline', 'spline-surface'
+])
+
+// Curve types that can be referenced by edges
+const CURVE_TYPES = new Set([
+  'straight', 'straight-curve',
+  'ellipse', 'ellipse-curve',
+  'intcurve', 'intcurve-curve',
+  'spline', 'spline-curve'
+])
+
 function parseACISFace(entity, entityMap) {
   const face = {
     type: 'face',
@@ -341,13 +380,13 @@ function parseACISFace(entity, entityMap) {
   }
 
   for (const chunk of entity.data) {
-    if (chunk.type === 'entity_ref') {
+    if (chunk.type === 'entity_ref' && chunk.id >= 0) {
       const ref = entityMap.get(chunk.id)
       if (ref) {
         if (ref.type === 'loop') {
           const loop = parseACISLoop(ref, entityMap)
           if (loop) face.loops.push(loop)
-        } else if (ref.type.endsWith('-surface')) {
+        } else if (SURFACE_TYPES.has(ref.type)) {
           face.surface = parseACISSurface(ref, entityMap)
         }
       }
@@ -416,7 +455,7 @@ function parseACISEdge(entity, entityMap) {
 
   let paramIdx = 0
   for (const chunk of entity.data) {
-    if (chunk.type === 'entity_ref') {
+    if (chunk.type === 'entity_ref' && chunk.id >= 0) {
       const ref = entityMap.get(chunk.id)
       if (ref) {
         if (ref.type === 'vertex') {
@@ -425,7 +464,7 @@ function parseACISEdge(entity, entityMap) {
           } else {
             edge.endVertex = parseACISVertex(ref, entityMap)
           }
-        } else if (ref.type.endsWith('-curve')) {
+        } else if (CURVE_TYPES.has(ref.type)) {
           edge.curve = parseACISCurve(ref, entityMap)
         }
       }
@@ -480,7 +519,10 @@ function parseACISSurface(entity, _entityMap) {
   const surfaceType = entity.type
   const surface = { type: surfaceType, id: entity.id }
 
-  switch (surfaceType) {
+  // Normalize surface type (handle both "plane" and "plane-surface")
+  const normalizedType = surfaceType.endsWith('-surface') ? surfaceType : surfaceType + '-surface'
+
+  switch (normalizedType) {
     case 'plane-surface': {
       let hasPosition = false
       for (const chunk of entity.data) {
@@ -594,7 +636,10 @@ function parseACISCurve(entity, _entityMap) {
   const curveType = entity.type
   const curve = { type: curveType, id: entity.id }
 
-  switch (curveType) {
+  // Normalize curve type (handle both "straight" and "straight-curve")
+  const normalizedType = curveType.endsWith('-curve') ? curveType : curveType + '-curve'
+
+  switch (normalizedType) {
     case 'straight-curve': {
       for (const chunk of entity.data) {
         if (chunk.type === 'position') {
@@ -694,6 +739,46 @@ function parseACISTransform(entity, _entityMap) {
 // ============================================================================
 
 /**
+ * Find the start of ACIS binary data in an SMB/SMBH file
+ * The file starts with "ASM BinaryFile" header, and actual data begins at first TAG_IDENT (0x0d)
+ */
+function findACISDataStart(buffer) {
+  const view = new Uint8Array(buffer)
+  const headerText = new TextDecoder().decode(view.slice(0, Math.min(512, view.length)))
+
+  // Look for "ASM BinaryFile" header (modern ACIS binary format)
+  if (headerText.startsWith('ASM BinaryFile') || headerText.startsWith('ASM ')) {
+    // Find the first TAG_IDENT (0x0d) which starts the asmheader record
+    for (let i = 0; i < Math.min(512, view.length - 10); i++) {
+      if (view[i] === 0x0d) {
+        // Check if next bytes look like a valid ident (length byte followed by ASCII letters)
+        const len = view[i + 1]
+        if (len > 0 && len < 64 && i + 2 + len <= view.length) {
+          const possibleStr = new TextDecoder().decode(view.slice(i + 2, i + 2 + len))
+          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(possibleStr)) {
+            return i
+          }
+        }
+      }
+    }
+  }
+
+  // Check for text-based ACIS format with "End-of-ACIS-data" marker
+  const endMarker = headerText.indexOf('End-of-ACIS-data')
+  if (endMarker > 0) {
+    let offset = endMarker + 'End-of-ACIS-data'.length
+    // Skip whitespace
+    while (offset < view.length &&
+      (view[offset] === 0x0A || view[offset] === 0x0D || view[offset] === 0x20)) {
+      offset++
+    }
+    return offset
+  }
+
+  return 0
+}
+
+/**
  * Parse F3D file (ZIP-based Fusion 360 format)
  * @param {ArrayBuffer} arrayBuffer - The F3D file data
  * @param {Function} loadJSZip - Function to load JSZip library
@@ -721,31 +806,11 @@ async function parseF3D(arrayBuffer, loadJSZip) {
     try {
       const smbData = await zip.file(smbFile).async('arraybuffer')
 
-      // Skip header if present
-      let dataOffset = 0
-      const headerView = new Uint8Array(smbData)
+      // Find where the actual ACIS data starts
+      const dataOffset = findACISDataStart(smbData)
 
-      const headerText = new TextDecoder().decode(headerView.slice(0, Math.min(4096, headerView.length)))
-      const endMarkerIdx = headerText.indexOf('\x00')
-      if (endMarkerIdx > 0 && endMarkerIdx < 2048) {
-        dataOffset = endMarkerIdx + 1
-      }
-
-      const asbMarker = headerText.indexOf('asmheader')
-      if (asbMarker >= 0) {
-        const endHeader = headerText.indexOf('End-of-ACIS-data')
-        if (endHeader > 0) {
-          dataOffset = endHeader + 'End-of-ACIS-data'.length
-          while (dataOffset < headerView.length &&
-            (headerView[dataOffset] === 0x0A ||
-              headerView[dataOffset] === 0x0D ||
-              headerView[dataOffset] === 0x20)) {
-            dataOffset++
-          }
-        }
-      }
-
-      const binaryData = smbData.slice(dataOffset)
+      // Create properly offset buffer
+      const binaryData = new Uint8Array(smbData, dataOffset)
       const reader = new ACISBinaryReader(binaryData)
       const { entities, entityMap } = parseACISEntities(reader)
       const parsedBodies = buildACISBodies(entities, entityMap)
