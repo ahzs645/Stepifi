@@ -553,12 +553,20 @@ export class Edge extends Topology {
     let i = super.set(record)
     ;[this._start, i] = getRefNode(record, i, 'vertex')
 
-    // Version-specific handling
-    if (getAsmMajor() > 217) {
-      i += 1 // skip
+    // Read start parameter (float after start vertex)
+    if (i < record.chunks.length && record.chunks[i] &&
+        (record.chunks[i].tag === 0x06 || record.chunks[i].tag === 0x05)) {
+      ;[this.parameter1, i] = getFloat(record.chunks, i)
     }
 
     ;[this._end, i] = getRefNode(record, i, 'vertex')
+
+    // Read end parameter (float after end vertex)
+    if (i < record.chunks.length && record.chunks[i] &&
+        (record.chunks[i].tag === 0x06 || record.chunks[i].tag === 0x05)) {
+      ;[this.parameter2, i] = getFloat(record.chunks, i)
+    }
+
     ;[this._owner, i] = getRefNode(record, i, 'coedge')
     ;[this._curve, i] = getRefNode(record, i, 'curve')
     ;[this.sense, i] = getEnumByTag(record.chunks, i, SENSE)

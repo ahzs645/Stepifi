@@ -677,7 +677,10 @@ export function createPlaneSurface(oc, origin, normal) {
   try {
     const pnt = makePoint(oc, origin)
     const dir = makeDirection(oc, normal)
-    return new oc.Geom_Plane_2(pnt, dir)
+    // Create gp_Pln from point and normal (gp_Pln_3 takes gp_Pnt, gp_Dir)
+    const gpPln = new oc.gp_Pln_3(pnt, dir)
+    // Geom_Plane_2 takes gp_Pln
+    return new oc.Geom_Plane_2(gpPln)
   } catch (e) {
     console.warn('createPlaneSurface failed:', e.message)
   }
@@ -860,6 +863,378 @@ export function buildWithOpenCascade(oc, bodies) {
 }
 
 // ============================================================================
+// ACIS Entity Converters
+// ============================================================================
+
+/**
+ * Convert ACIS surface entity to OpenCascade surface
+ */
+export function convertACISSurface(oc, surfaceEntity) {
+  if (!surfaceEntity) return null
+
+  try {
+    const typeName = surfaceEntity.getType ? surfaceEntity.getType() : ''
+
+    if (typeName.includes('plane')) {
+      return createPlaneSurface(oc, surfaceEntity.origin, surfaceEntity.normal)
+    } else if (typeName.includes('cone')) {
+      const ax3 = makeAx3(oc, surfaceEntity.center, surfaceEntity.axis, surfaceEntity.uvOrigin)
+      const radius = surfaceEntity.majorRadius || 1.0
+      const semiAngle = Math.abs(surfaceEntity.semiAngle) || Math.PI / 4
+      if (Math.abs(semiAngle) < 1e-6) {
+        return new oc.Geom_CylindricalSurface_1(ax3, radius)
+      }
+      return new oc.Geom_ConicalSurface_1(ax3, semiAngle, radius)
+    } else if (typeName.includes('sphere')) {
+      return createSphericalSurface(oc, surfaceEntity.center, surfaceEntity.radius || 1.0)
+    } else if (typeName.includes('torus')) {
+      const majorRadius = Math.abs(surfaceEntity.major) || 2.0
+      const minorRadius = Math.abs(surfaceEntity.minor) || 0.5
+      return createToroidalSurface(oc, surfaceEntity.center, surfaceEntity.axis, majorRadius, minorRadius)
+    } else if (typeName.includes('spline') && surfaceEntity.nubs) {
+      return createBSplineSurface(oc, surfaceEntity.nubs)
+    }
+
+    console.warn('Unsupported surface type: ' + typeName)
+    return null
+  } catch (e) {
+    console.warn('Failed to convert surface:', e.message)
+    return null
+  }
+}
+
+/**
+ * Convert ACIS curve entity to OpenCascade curve
+ */
+export function convertACISCurve(oc, curveEntity, startPt, endPt) {
+  if (!curveEntity) return null
+
+  try {
+    const typeName = curveEntity.getType ? curveEntity.getType() : ''
+
+    if (typeName.includes('straight')) {
+      const origin = makePoint(oc, curveEntity.origin)
+      const direction = makeDirection(oc, curveEntity.direction)
+      // gp_Ax1 -> gp_Lin -> Geom_Line
+      const ax1 = new oc.gp_Ax1_2(origin, direction)
+      const lin = new oc.gp_Lin_2(ax1)
+      return new oc.Geom_Line_2(lin)
+    } else if (typeName.includes('ellipse')) {
+      const center = makePoint(oc, curveEntity.center)
+      const normal = makeDirection(oc, curveEntity.axis)
+      const majorVec = curveEntity.major || { x: 1, y: 0, z: 0 }
+      const majorAxis = makeDirection(oc, majorVec)
+      const majorRadius = Math.sqrt(majorVec.x ** 2 + majorVec.y ** 2 + majorVec.z ** 2) || 1.0
+      const ratio = curveEntity.ratio || 1.0
+      const minorRadius = majorRadius * ratio
+
+      const ax2 = new oc.gp_Ax2_2(center, normal, majorAxis)
+
+      if (Math.abs(ratio - 1.0) < 1e-6) {
+        return new oc.Geom_Circle_2(ax2, majorRadius)
+      } else {
+        return new oc.Geom_Ellipse_1(ax2, majorRadius, minorRadius)
+      }
+    } else if ((typeName.includes('intcurve') || typeName.includes('spline')) && curveEntity.nubs) {
+      return createBSplineCurve(oc, curveEntity.nubs, 'forward', typeName)
+    }
+
+    // Fallback: create line between start and end points
+    if (startPt && endPt) {
+      const p1 = makePoint(oc, startPt)
+      const dir = makeDirection(oc, {
+        x: endPt.x - startPt.x,
+        y: endPt.y - startPt.y,
+        z: endPt.z - startPt.z
+      })
+      const ax1 = new oc.gp_Ax1_2(p1, dir)
+      const lin = new oc.gp_Lin_2(ax1)
+      return new oc.Geom_Line_2(lin)
+    }
+
+    console.warn('Unsupported curve type: ' + typeName)
+    return null
+  } catch (e) {
+    console.warn('Failed to convert curve:', e.message)
+    return null
+  }
+}
+
+/**
+ * Convert ACIS edge to OpenCascade edge
+ */
+export function convertACISEdge(oc, edgeEntity) {
+  if (!edgeEntity) return null
+
+  try {
+    const curveEntity = edgeEntity.getCurve ? edgeEntity.getCurve() : null
+    const startPt = edgeEntity.getStart ? edgeEntity.getStart() : null
+    const endPt = edgeEntity.getEnd ? edgeEntity.getEnd() : null
+
+    // Get start/end points from vertices
+    const startVertex = startPt && startPt.point ? startPt.point : startPt
+    const endVertex = endPt && endPt.point ? endPt.point : endPt
+
+    const curve = convertACISCurve(oc, curveEntity, startVertex, endVertex)
+    if (!curve) return null
+
+    // Create edge from curve
+    const handleCurve = new oc.Handle_Geom_Curve_2(curve)
+
+    // If we have parameters, use them
+    const param1 = edgeEntity.parameter1
+    const param2 = edgeEntity.parameter2
+
+    let builder
+    if (param1 !== undefined && param2 !== undefined && !isNaN(param1) && !isNaN(param2)) {
+      builder = new oc.BRepBuilderAPI_MakeEdge_24(handleCurve, param1, param2)
+    } else if (startVertex && endVertex) {
+      // Use points to define edge bounds
+      const p1 = makePoint(oc, startVertex)
+      const p2 = makePoint(oc, endVertex)
+      builder = new oc.BRepBuilderAPI_MakeEdge_21(handleCurve, p1, p2)
+    } else {
+      builder = new oc.BRepBuilderAPI_MakeEdge_20(handleCurve)
+    }
+
+    if (builder.IsDone()) {
+      const edge = builder.Edge()
+      if (edgeEntity.sense === 'reversed') {
+        edge.Reverse()
+      }
+      return edge
+    }
+  } catch (e) {
+    console.warn('Failed to convert edge:', e.message)
+  }
+  return null
+}
+
+/**
+ * Convert ACIS loop to OpenCascade wire
+ */
+export function convertACISLoop(oc, loopEntity) {
+  if (!loopEntity) return null
+
+  try {
+    const coedges = loopEntity.getCoedges ? loopEntity.getCoedges() : []
+    if (coedges.length === 0) return null
+
+    const wireBuilder = new oc.BRepBuilderAPI_MakeWire_1()
+
+    for (const coedge of coedges) {
+      const edgeEntity = coedge.getEdge ? coedge.getEdge() : null
+      const edge = convertACISEdge(oc, edgeEntity)
+
+      if (edge) {
+        // Apply coedge sense
+        if (coedge.sense === 'reversed') {
+          edge.Reverse()
+        }
+        wireBuilder.Add_1(edge)
+      }
+    }
+
+    if (wireBuilder.IsDone()) {
+      return wireBuilder.Wire()
+    }
+  } catch (e) {
+    console.warn('Failed to convert loop:', e.message)
+  }
+  return null
+}
+
+/**
+ * Convert ACIS face to OpenCascade face
+ */
+export function convertACISFace(oc, faceEntity) {
+  if (!faceEntity) return null
+
+  try {
+    const surfaceEntity = faceEntity.getSurface ? faceEntity.getSurface() : null
+    const surface = convertACISSurface(oc, surfaceEntity)
+
+    if (!surface) {
+      console.warn('No surface for face, skipping')
+      return null
+    }
+
+    const handleSurface = new oc.Handle_Geom_Surface_2(surface)
+    const loops = faceEntity.getLoops ? faceEntity.getLoops() : []
+
+    if (loops.length > 0) {
+      const outerLoop = loops[0]
+      const outerWire = convertACISLoop(oc, outerLoop)
+
+      if (outerWire) {
+        try {
+          // BRepBuilderAPI_MakeFace_15 takes (Handle_Geom_Surface, TopoDS_Wire)
+          const faceBuilder = new oc.BRepBuilderAPI_MakeFace_15(handleSurface, outerWire)
+
+          for (let i = 1; i < loops.length; i++) {
+            const innerWire = convertACISLoop(oc, loops[i])
+            if (innerWire) {
+              innerWire.Reverse()
+              faceBuilder.Add(innerWire)
+            }
+          }
+
+          if (faceBuilder.IsDone()) {
+            const result = faceBuilder.Face()
+            if (faceEntity.sense === 'reversed') result.Reverse()
+            return result
+          }
+        } catch (e) {
+          console.warn('Failed to create bounded face:', e.message)
+        }
+      }
+    }
+
+    // Don't create unbounded faces - they have infinite extents
+    console.warn('No valid loops for face, skipping (unbounded faces not supported)')
+  } catch (e) {
+    console.warn('Failed to create face:', e.message)
+  }
+  return null
+}
+
+/**
+ * Convert ACIS shell to OpenCascade shell
+ */
+export function convertACISShell(oc, shellEntity) {
+  if (!shellEntity) return null
+
+  try {
+    const faces = shellEntity.getFaces ? shellEntity.getFaces() : []
+    if (faces.length === 0) return null
+
+    const shellBuilder = new oc.BRep_Builder()
+    const shell = new oc.TopoDS_Shell()
+    shellBuilder.MakeShell(shell)
+
+    let faceCount = 0
+    for (const faceEntity of faces) {
+      const face = convertACISFace(oc, faceEntity)
+      if (face) {
+        shellBuilder.Add(shell, face)
+        faceCount++
+      }
+    }
+
+    if (faceCount > 0) {
+      return shell
+    }
+  } catch (e) {
+    console.warn('Failed to convert shell:', e.message)
+  }
+  return null
+}
+
+/**
+ * Convert ACIS body to OpenCascade solid
+ */
+export function convertACISBody(oc, bodyEntity) {
+  if (!bodyEntity) return null
+
+  try {
+    const lumps = bodyEntity.getLumps ? bodyEntity.getLumps() : []
+    const shells = []
+
+    for (const lump of lumps) {
+      const lumpShells = lump.getShells ? lump.getShells() : []
+      for (const shellEntity of lumpShells) {
+        const shell = convertACISShell(oc, shellEntity)
+        if (shell) {
+          shells.push(shell)
+        }
+      }
+    }
+
+    if (shells.length === 0) return null
+
+    // Try to create solid from shells
+    if (shells.length === 1) {
+      try {
+        const solidBuilder = new oc.BRepBuilderAPI_MakeSolid_2(shells[0])
+        if (solidBuilder.IsDone()) {
+          return solidBuilder.Solid()
+        }
+      } catch (e) {
+        // Fall back to returning shell
+        return shells[0]
+      }
+    }
+
+    // Multiple shells - create compound
+    const builder = new oc.BRep_Builder()
+    const compound = new oc.TopoDS_Compound()
+    builder.MakeCompound(compound)
+
+    for (const shell of shells) {
+      builder.Add(compound, shell)
+    }
+
+    return compound
+  } catch (e) {
+    console.warn('Failed to convert body:', e.message)
+  }
+  return null
+}
+
+/**
+ * Convert array of ACIS bodies to single OpenCascade shape
+ */
+export function convertACISBodiesToShape(oc, bodies) {
+  if (!bodies || bodies.length === 0) return null
+
+  console.log(`  Converting ${bodies.length} ACIS bodies to OpenCascade shapes...`)
+
+  const shapes = []
+  let totalFaces = 0
+
+  for (let i = 0; i < bodies.length; i++) {
+    const body = bodies[i]
+    console.log(`  Processing body ${i + 1}/${bodies.length}...`)
+
+    const shape = convertACISBody(oc, body)
+    if (shape) {
+      shapes.push(shape)
+
+      // Count faces
+      const lumps = body.getLumps ? body.getLumps() : []
+      for (const lump of lumps) {
+        const shells = lump.getShells ? lump.getShells() : []
+        for (const shell of shells) {
+          const faces = shell.getFaces ? shell.getFaces() : []
+          totalFaces += faces.length
+        }
+      }
+    }
+  }
+
+  console.log(`  Total faces to process: ${totalFaces}`)
+
+  if (shapes.length === 0) {
+    throw new Error('Failed to convert any ACIS bodies to geometry')
+  }
+
+  if (shapes.length === 1) {
+    return shapes[0]
+  }
+
+  // Combine into compound
+  const builder = new oc.BRep_Builder()
+  const compound = new oc.TopoDS_Compound()
+  builder.MakeCompound(compound)
+
+  for (const shape of shapes) {
+    builder.Add(compound, shape)
+  }
+
+  return compound
+}
+
+// ============================================================================
 // Exports
 // ============================================================================
 
@@ -898,5 +1273,15 @@ export default {
   // Shape builders
   createFaceFromSurface,
   createEdgeFromCurve,
-  buildWithOpenCascade
+  buildWithOpenCascade,
+
+  // ACIS converters
+  convertACISSurface,
+  convertACISCurve,
+  convertACISEdge,
+  convertACISLoop,
+  convertACISFace,
+  convertACISShell,
+  convertACISBody,
+  convertACISBodiesToShape
 }
