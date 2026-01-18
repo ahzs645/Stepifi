@@ -21,6 +21,8 @@ export interface ConversionOptions {
   repair?: boolean
   /** Merge coplanar faces */
   mergeFaces?: boolean
+  /** Skip face merge entirely (faster but larger files) */
+  skipMerge?: boolean
 }
 
 export interface MeshStats {
@@ -39,6 +41,14 @@ export interface MeshStats {
   isWatertight?: boolean
   qualityIssues?: string[]
   note?: string
+  // JS-level analysis fields
+  holeCount?: number
+  nonManifoldEdgeCount?: number
+  selfIntersectionCount?: number
+  selfIntersections?: string // 'skipped (large mesh)' if skipped
+  jsAnalyzed?: boolean
+  analyzedTriangles?: number
+  analyzedVertices?: number
 }
 
 export interface ConversionResult {
@@ -66,6 +76,7 @@ export function convertFile(
       tolerance = 0.1,
       repair = true,
       mergeFaces = true,
+      skipMerge = false,
     } = options
 
     let beforeStats: MeshStats | undefined
@@ -121,6 +132,7 @@ export function convertFile(
         tolerance,
         repair,
         mergeFaces,
+        skipMerge,
       },
     })
   })
@@ -128,6 +140,7 @@ export function convertFile(
 
 export function analyzeFile(
   fileData: ArrayBuffer,
+  fileName: string = 'input.stl',
   onProgress?: (message: string) => void,
 ): Promise<MeshStats> {
   return new Promise((resolve, reject) => {
@@ -157,7 +170,7 @@ export function analyzeFile(
     const fileCopy = fileData.slice(0)
     w.postMessage({
       type: 'analyze',
-      data: { fileData: fileCopy },
+      data: { fileData: fileCopy, fileName },
     })
   })
 }

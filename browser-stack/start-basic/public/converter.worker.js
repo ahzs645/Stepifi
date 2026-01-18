@@ -358,6 +358,625 @@ function analyzeMesh(oc, shape, originalTriangleCount = 0) {
 }
 
 /**
+ * Create canonical edge key (order-independent)
+ */
+function edgeKey(a, b) {
+  return a < b ? `${a}-${b}` : `${b}-${a}`
+}
+
+/**
+ * Build edge-to-triangle adjacency map
+ * Returns Map: edgeKey -> [{ triIndex, orderedKey }]
+ */
+function buildEdgeMap(triangles) {
+  const edgeMap = new Map()
+
+  for (let i = 0; i < triangles.length; i++) {
+    const tri = triangles[i]
+    const edges = [
+      [tri.v1, tri.v2],
+      [tri.v2, tri.v3],
+      [tri.v3, tri.v1]
+    ]
+
+    for (const [a, b] of edges) {
+      const key = edgeKey(a, b)
+      const ordered = `${a}-${b}` // preserves winding direction
+      if (!edgeMap.has(key)) {
+        edgeMap.set(key, [])
+      }
+      edgeMap.get(key).push({ triIndex: i, a, b, ordered })
+    }
+  }
+
+  return edgeMap
+}
+
+/**
+ * Harmonize normals using BFS flood-fill algorithm
+ * Starts from triangle 0 (assumed correct) and propagates consistent winding
+ *
+ * Two adjacent triangles sharing edge (A,B) should have opposite winding:
+ * - Triangle 1: A → B (edge goes A to B)
+ * - Triangle 2: B → A (edge goes B to A)
+ * If both have A → B, one needs flipping.
+ */
+function harmonizeNormals(triangles) {
+  if (triangles.length === 0) return { flipped: 0, triangles }
+
+  // Build adjacency: triangle -> [neighbor triangle indices via shared edges]
+  const edgeMap = buildEdgeMap(triangles)
+  const triAdjacency = new Map() // triIndex -> [{ neighbor, sharedEdge, myWinding, neighborWinding }]
+
+  for (const [, tris] of edgeMap) {
+    if (tris.length === 2) {
+      const [t1, t2] = tris
+
+      // Add adjacency for both triangles
+      if (!triAdjacency.has(t1.triIndex)) triAdjacency.set(t1.triIndex, [])
+      if (!triAdjacency.has(t2.triIndex)) triAdjacency.set(t2.triIndex, [])
+
+      triAdjacency.get(t1.triIndex).push({
+        neighbor: t2.triIndex,
+        myOrdered: t1.ordered,
+        neighborOrdered: t2.ordered
+      })
+      triAdjacency.get(t2.triIndex).push({
+        neighbor: t1.triIndex,
+        myOrdered: t2.ordered,
+        neighborOrdered: t1.ordered
+      })
+    }
+  }
+
+  // BFS from triangle 0
+  const visited = new Set()
+  const toFlip = new Set()
+  const queue = [{ triIdx: 0, shouldFlip: false }]
+  visited.add(0)
+
+  while (queue.length > 0) {
+    const { triIdx, shouldFlip } = queue.shift()
+
+    if (shouldFlip) {
+      toFlip.add(triIdx)
+    }
+
+    const neighbors = triAdjacency.get(triIdx) || []
+
+    for (const { neighbor, myOrdered, neighborOrdered } of neighbors) {
+      if (visited.has(neighbor)) continue
+      visited.add(neighbor)
+
+      // Check if windings are consistent
+      // For proper manifold: if my edge goes A→B, neighbor should have B→A
+      // Same winding (both A→B or both B→A) means one needs flipping relative to the other
+      const currentFlipped = toFlip.has(triIdx)
+      let sameWinding = (myOrdered === neighborOrdered)
+
+      // If current triangle is flipped, its effective winding is reversed
+      if (currentFlipped) {
+        sameWinding = !sameWinding
+      }
+
+      // If same effective winding, neighbor needs to flip (relative to the reference)
+      queue.push({ triIdx: neighbor, shouldFlip: sameWinding })
+    }
+  }
+
+  // Flip marked triangles (swap v1 and v2)
+  for (const idx of toFlip) {
+    const t = triangles[idx]
+    const temp = t.v1
+    t.v1 = t.v2
+    t.v2 = temp
+  }
+
+  return { flipped: toFlip.size, triangles }
+}
+
+/**
+ * Detect non-manifold edges (edges shared by more than 2 triangles)
+ */
+function detectNonManifolds(triangles) {
+  const edgeCount = new Map()
+
+  for (const tri of triangles) {
+    const edges = [
+      edgeKey(tri.v1, tri.v2),
+      edgeKey(tri.v2, tri.v3),
+      edgeKey(tri.v3, tri.v1)
+    ]
+    for (const edge of edges) {
+      edgeCount.set(edge, (edgeCount.get(edge) || 0) + 1)
+    }
+  }
+
+  const nonManifoldEdges = []
+  for (const [edge, count] of edgeCount) {
+    if (count > 2) {
+      nonManifoldEdges.push({ edge, count })
+    }
+  }
+
+  return {
+    hasNonManifolds: nonManifoldEdges.length > 0,
+    edges: nonManifoldEdges,
+    count: nonManifoldEdges.length
+  }
+}
+
+/**
+ * Remove non-manifold triangles (conservative: remove extra triangles sharing bad edges)
+ */
+function removeNonManifolds(_vertices, triangles) {
+  const detection = detectNonManifolds(triangles)
+  if (!detection.hasNonManifolds) {
+    return { triangles, removed: 0, edges: [] }
+  }
+
+  const badEdgeSet = new Set(detection.edges.map(e => e.edge))
+  const edgeTriangles = new Map() // edge -> [triIndex]
+  const toRemove = new Set()
+
+  for (let i = 0; i < triangles.length; i++) {
+    const tri = triangles[i]
+    const edges = [
+      edgeKey(tri.v1, tri.v2),
+      edgeKey(tri.v2, tri.v3),
+      edgeKey(tri.v3, tri.v1)
+    ]
+
+    for (const edge of edges) {
+      if (badEdgeSet.has(edge)) {
+        if (!edgeTriangles.has(edge)) edgeTriangles.set(edge, [])
+        edgeTriangles.get(edge).push(i)
+
+        // Keep first 2 triangles per edge, mark extras for removal
+        if (edgeTriangles.get(edge).length > 2) {
+          toRemove.add(i)
+        }
+      }
+    }
+  }
+
+  const newTriangles = triangles.filter((_, i) => !toRemove.has(i))
+  return {
+    triangles: newTriangles,
+    removed: toRemove.size,
+    edges: detection.edges
+  }
+}
+
+/**
+ * Find boundary edges (edges with only 1 adjacent triangle)
+ */
+function findBoundaryEdges(triangles) {
+  const edgeMap = buildEdgeMap(triangles)
+  const boundaryEdges = []
+
+  for (const [edge, tris] of edgeMap) {
+    if (tris.length === 1) {
+      // Parse edge key to get vertex indices
+      const [a, b] = edge.split('-').map(Number)
+      boundaryEdges.push({ a, b, triIndex: tris[0].triIndex })
+    }
+  }
+
+  return boundaryEdges
+}
+
+/**
+ * Group boundary edges into closed loops (holes)
+ */
+function groupBoundaryEdgesIntoLoops(boundaryEdges) {
+  if (boundaryEdges.length === 0) return []
+
+  // Build vertex adjacency for boundary edges
+  const vertexAdj = new Map() // vertex -> [connected vertices]
+  for (const { a, b } of boundaryEdges) {
+    if (!vertexAdj.has(a)) vertexAdj.set(a, [])
+    if (!vertexAdj.has(b)) vertexAdj.set(b, [])
+    vertexAdj.get(a).push(b)
+    vertexAdj.get(b).push(a)
+  }
+
+  const visited = new Set()
+  const loops = []
+
+  for (const startVertex of vertexAdj.keys()) {
+    if (visited.has(startVertex)) continue
+
+    // Trace the loop
+    const loop = []
+    let current = startVertex
+    let prev = null
+
+    while (true) {
+      if (visited.has(current) && loop.length > 2) {
+        // Closed the loop
+        break
+      }
+
+      if (visited.has(current)) {
+        // Hit a visited vertex but not a closed loop - complex topology
+        break
+      }
+
+      visited.add(current)
+      loop.push(current)
+
+      const neighbors = vertexAdj.get(current) || []
+      // Find next vertex (not the one we came from)
+      let next = null
+      for (const n of neighbors) {
+        if (n !== prev) {
+          next = n
+          break
+        }
+      }
+
+      if (next === null) break
+      if (next === startVertex && loop.length >= 3) {
+        // Successfully closed the loop
+        break
+      }
+
+      prev = current
+      current = next
+    }
+
+    if (loop.length >= 3) {
+      loops.push(loop)
+    }
+  }
+
+  return loops
+}
+
+/**
+ * Calculate cross product of vectors (b-a) and (c-a)
+ */
+function cross(a, b, c, vertices) {
+  const v1 = vertices[a]
+  const v2 = vertices[b]
+  const v3 = vertices[c]
+
+  const ux = v2.x - v1.x, uy = v2.y - v1.y, uz = v2.z - v1.z
+  const vx = v3.x - v1.x, vy = v3.y - v1.y, vz = v3.z - v1.z
+
+  return {
+    x: uy * vz - uz * vy,
+    y: uz * vx - ux * vz,
+    z: ux * vy - uy * vx
+  }
+}
+
+/**
+ * Check if point p is inside triangle (a,b,c) using barycentric coordinates
+ * Works in 2D - project to dominant axis
+ */
+function pointInTriangle2D(px, py, ax, ay, bx, by, cx, cy) {
+  const denom = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+  if (Math.abs(denom) < 1e-10) return false
+
+  const u = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / denom
+  const v = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / denom
+  const w = 1 - u - v
+
+  return u >= 0 && v >= 0 && w >= 0
+}
+
+/**
+ * Check if vertex at index 'ear' forms a valid ear (convex and no other vertices inside)
+ */
+function isEar(vertices, polygon, prevIdx, currIdx, nextIdx) {
+  const prev = polygon[prevIdx]
+  const curr = polygon[currIdx]
+  const next = polygon[nextIdx]
+
+  const vPrev = vertices[prev]
+  const vCurr = vertices[curr]
+  const vNext = vertices[next]
+
+  // Check convexity (cross product should be positive for CCW polygon)
+  const crossZ = (vCurr.x - vPrev.x) * (vNext.y - vPrev.y) -
+                 (vCurr.y - vPrev.y) * (vNext.x - vPrev.x)
+
+  if (crossZ <= 0) return false // Reflex vertex, not an ear
+
+  // Check that no other polygon vertices are inside this triangle
+  for (let i = 0; i < polygon.length; i++) {
+    if (i === prevIdx || i === currIdx || i === nextIdx) continue
+
+    const p = vertices[polygon[i]]
+    if (pointInTriangle2D(p.x, p.y, vPrev.x, vPrev.y, vCurr.x, vCurr.y, vNext.x, vNext.y)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+/**
+ * Triangulate a hole using ear clipping algorithm
+ * Returns array of new triangles
+ */
+function triangulateHole(vertices, holeVertices) {
+  if (holeVertices.length < 3) return []
+  if (holeVertices.length === 3) {
+    return [{ v1: holeVertices[0], v2: holeVertices[1], v3: holeVertices[2] }]
+  }
+
+  const tris = []
+  const remaining = [...holeVertices]
+  let maxIterations = remaining.length * 2 // Prevent infinite loops
+
+  while (remaining.length > 3 && maxIterations > 0) {
+    maxIterations--
+    let earFound = false
+
+    for (let i = 0; i < remaining.length; i++) {
+      const prevIdx = (i - 1 + remaining.length) % remaining.length
+      const nextIdx = (i + 1) % remaining.length
+
+      if (isEar(vertices, remaining, prevIdx, i, nextIdx)) {
+        tris.push({
+          v1: remaining[prevIdx],
+          v2: remaining[i],
+          v3: remaining[nextIdx]
+        })
+        remaining.splice(i, 1)
+        earFound = true
+        break
+      }
+    }
+
+    if (!earFound) {
+      // No ear found - polygon may be degenerate or self-intersecting
+      // Try to salvage by creating a triangle anyway
+      if (remaining.length >= 3) {
+        tris.push({
+          v1: remaining[0],
+          v2: remaining[1],
+          v3: remaining[2]
+        })
+        remaining.splice(1, 1)
+      }
+    }
+  }
+
+  // Final triangle
+  if (remaining.length === 3) {
+    tris.push({ v1: remaining[0], v2: remaining[1], v3: remaining[2] })
+  }
+
+  return tris
+}
+
+/**
+ * Fill holes in mesh by finding boundary edges and triangulating
+ */
+function fillHoles(vertices, triangles, maxHoleSize = 1000) {
+  const boundaryEdges = findBoundaryEdges(triangles)
+
+  if (boundaryEdges.length === 0) {
+    return { triangles, filled: 0, holeCount: 0 }
+  }
+
+  const holes = groupBoundaryEdgesIntoLoops(boundaryEdges)
+  let filledCount = 0
+  const newTriangles = [...triangles]
+
+  for (const hole of holes) {
+    if (hole.length > maxHoleSize) {
+      // Skip large holes
+      continue
+    }
+
+    const holeTris = triangulateHole(vertices, hole)
+    newTriangles.push(...holeTris)
+    filledCount++
+  }
+
+  return {
+    triangles: newTriangles,
+    filled: filledCount,
+    holeCount: holes.length,
+    skippedLargeHoles: holes.filter(h => h.length > maxHoleSize).length
+  }
+}
+
+/**
+ * Compute optimal cell size for spatial hashing based on average triangle size
+ */
+function computeOptimalCellSize(vertices, triangles) {
+  if (triangles.length === 0 || vertices.length === 0) return 1.0
+
+  let totalSize = 0
+  const sampleSize = Math.min(100, triangles.length)
+
+  for (let i = 0; i < sampleSize; i++) {
+    const idx = Math.floor(i * triangles.length / sampleSize)
+    const tri = triangles[idx]
+    const v1 = vertices[tri.v1]
+    const v2 = vertices[tri.v2]
+    const v3 = vertices[tri.v3]
+
+    // Approximate triangle size as max edge length
+    const d1 = Math.sqrt((v2.x-v1.x)**2 + (v2.y-v1.y)**2 + (v2.z-v1.z)**2)
+    const d2 = Math.sqrt((v3.x-v2.x)**2 + (v3.y-v2.y)**2 + (v3.z-v2.z)**2)
+    const d3 = Math.sqrt((v1.x-v3.x)**2 + (v1.y-v3.y)**2 + (v1.z-v3.z)**2)
+    totalSize += Math.max(d1, d2, d3)
+  }
+
+  return (totalSize / sampleSize) * 2 // Cell size = 2x average edge length
+}
+
+/**
+ * Get grid cells that a triangle occupies
+ */
+function getTriangleCells(vertices, tri, cellSize) {
+  const v1 = vertices[tri.v1]
+  const v2 = vertices[tri.v2]
+  const v3 = vertices[tri.v3]
+
+  const minX = Math.floor(Math.min(v1.x, v2.x, v3.x) / cellSize)
+  const maxX = Math.floor(Math.max(v1.x, v2.x, v3.x) / cellSize)
+  const minY = Math.floor(Math.min(v1.y, v2.y, v3.y) / cellSize)
+  const maxY = Math.floor(Math.max(v1.y, v2.y, v3.y) / cellSize)
+  const minZ = Math.floor(Math.min(v1.z, v2.z, v3.z) / cellSize)
+  const maxZ = Math.floor(Math.max(v1.z, v2.z, v3.z) / cellSize)
+
+  const cells = []
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        cells.push(`${x},${y},${z}`)
+      }
+    }
+  }
+  return cells
+}
+
+/**
+ * Check if two triangles share a vertex
+ */
+function trianglesShareVertex(t1, t2) {
+  const v1 = [t1.v1, t1.v2, t1.v3]
+  const v2 = [t2.v1, t2.v2, t2.v3]
+  for (const a of v1) {
+    for (const b of v2) {
+      if (a === b) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Möller–Trumbore triangle-triangle intersection test
+ * Returns true if triangles intersect (excluding shared edges/vertices)
+ */
+function trianglesIntersect(vertices, t1, t2) {
+  // Get triangle vertices
+  const a1 = vertices[t1.v1], b1 = vertices[t1.v2], c1 = vertices[t1.v3]
+  const a2 = vertices[t2.v1], b2 = vertices[t2.v2], c2 = vertices[t2.v3]
+
+  // Test all edges of t1 against t2
+  const edges1 = [[a1, b1], [b1, c1], [c1, a1]]
+  for (const [p0, p1] of edges1) {
+    if (rayTriangleIntersect(p0, p1, a2, b2, c2)) return true
+  }
+
+  // Test all edges of t2 against t1
+  const edges2 = [[a2, b2], [b2, c2], [c2, a2]]
+  for (const [p0, p1] of edges2) {
+    if (rayTriangleIntersect(p0, p1, a1, b1, c1)) return true
+  }
+
+  return false
+}
+
+/**
+ * Ray-triangle intersection using Möller–Trumbore algorithm
+ */
+function rayTriangleIntersect(p0, p1, v0, v1, v2) {
+  const EPSILON = 1e-10
+
+  // Ray direction
+  const dx = p1.x - p0.x
+  const dy = p1.y - p0.y
+  const dz = p1.z - p0.z
+
+  // Edge vectors
+  const e1x = v1.x - v0.x, e1y = v1.y - v0.y, e1z = v1.z - v0.z
+  const e2x = v2.x - v0.x, e2y = v2.y - v0.y, e2z = v2.z - v0.z
+
+  // Cross product d × e2
+  const hx = dy * e2z - dz * e2y
+  const hy = dz * e2x - dx * e2z
+  const hz = dx * e2y - dy * e2x
+
+  const a = e1x * hx + e1y * hy + e1z * hz
+  if (a > -EPSILON && a < EPSILON) return false // Ray parallel to triangle
+
+  const f = 1.0 / a
+  const sx = p0.x - v0.x, sy = p0.y - v0.y, sz = p0.z - v0.z
+  const u = f * (sx * hx + sy * hy + sz * hz)
+  if (u < 0.0 || u > 1.0) return false
+
+  // Cross product s × e1
+  const qx = sy * e1z - sz * e1y
+  const qy = sz * e1x - sx * e1z
+  const qz = sx * e1y - sy * e1x
+
+  const v = f * (dx * qx + dy * qy + dz * qz)
+  if (v < 0.0 || u + v > 1.0) return false
+
+  const t = f * (e2x * qx + e2y * qy + e2z * qz)
+
+  // Check if intersection is within the edge segment [0, 1]
+  return t > EPSILON && t < 1.0 - EPSILON
+}
+
+/**
+ * Detect self-intersections using spatial hashing
+ */
+function detectSelfIntersections(vertices, triangles, skipLarge = true) {
+  const LARGE_THRESHOLD = 50000
+
+  if (skipLarge && triangles.length > LARGE_THRESHOLD) {
+    return {
+      hasIntersections: false,
+      count: 0,
+      skipped: true,
+      reason: `Skipped (${triangles.length.toLocaleString()} triangles > ${LARGE_THRESHOLD.toLocaleString()})`
+    }
+  }
+
+  // Build spatial hash grid
+  const cellSize = computeOptimalCellSize(vertices, triangles)
+  const grid = new Map() // cell -> [triangleIndices]
+
+  for (let i = 0; i < triangles.length; i++) {
+    const cells = getTriangleCells(vertices, triangles[i], cellSize)
+    for (const cell of cells) {
+      if (!grid.has(cell)) grid.set(cell, [])
+      grid.get(cell).push(i)
+    }
+  }
+
+  // Check potential intersections
+  const checked = new Set()
+  let intersectionCount = 0
+
+  for (const [, triIndices] of grid) {
+    for (let i = 0; i < triIndices.length; i++) {
+      for (let j = i + 1; j < triIndices.length; j++) {
+        const a = triIndices[i], b = triIndices[j]
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`
+
+        if (checked.has(key)) continue
+        checked.add(key)
+
+        // Skip adjacent triangles
+        if (trianglesShareVertex(triangles[a], triangles[b])) continue
+
+        if (trianglesIntersect(vertices, triangles[a], triangles[b])) {
+          intersectionCount++
+        }
+      }
+    }
+  }
+
+  return {
+    hasIntersections: intersectionCount > 0,
+    count: intersectionCount,
+    skipped: false
+  }
+}
+
+/**
  * JavaScript-level mesh repairs on raw triangle data
  * Works on mesh data before OpenCascade processing
  */
@@ -438,48 +1057,38 @@ function repairMeshData(vertices, triangles, tolerance = 0.001) {
     repairs.push(`Removed ${duplicateTriangles} duplicate triangles`)
   }
 
-  // 4. Harmonize normals using edge consistency
-  // Build edge-to-triangle adjacency to detect inconsistent winding
-  const edgeMap = new Map()
-
-  const edgeKey = (a, b) => a < b ? `${a}-${b}` : `${b}-${a}`
-  const orderedEdgeKey = (a, b) => `${a}-${b}` // preserves winding
-
-  for (let i = 0; i < uniqueTriangles.length; i++) {
-    const tri = uniqueTriangles[i]
-    const edges = [
-      [tri.v1, tri.v2],
-      [tri.v2, tri.v3],
-      [tri.v3, tri.v1]
-    ]
-
-    for (const [a, b] of edges) {
-      const key = edgeKey(a, b)
-      if (!edgeMap.has(key)) {
-        edgeMap.set(key, [])
-      }
-      edgeMap.get(key).push({ triIndex: i, orderedKey: orderedEdgeKey(a, b) })
-    }
+  // 4. Harmonize normals using BFS flood-fill
+  const harmonizeResult = harmonizeNormals(uniqueTriangles)
+  if (harmonizeResult.flipped > 0) {
+    repairs.push(`Harmonized normals: flipped ${harmonizeResult.flipped} triangles`)
   }
 
-  // Check edge consistency - adjacent triangles should have opposite winding
-  let inconsistentEdges = 0
-  for (const [, tris] of edgeMap) {
-    if (tris.length === 2) {
-      // If both triangles have same ordered edge, one needs flipping
-      if (tris[0].orderedKey === tris[1].orderedKey) {
-        inconsistentEdges++
-      }
-    }
+  // 5. Detect and remove non-manifold edges
+  const nonManifoldResult = removeNonManifolds(newVertices, harmonizeResult.triangles)
+  if (nonManifoldResult.removed > 0) {
+    repairs.push(`Removed ${nonManifoldResult.removed} non-manifold triangles (${nonManifoldResult.edges.length} bad edges)`)
   }
 
-  if (inconsistentEdges > 0) {
-    repairs.push(`Found ${inconsistentEdges} inconsistent edges (may indicate flipped normals)`)
+  // 6. Fill small holes
+  const fillResult = fillHoles(newVertices, nonManifoldResult.triangles, 100) // Max 100 vertices per hole
+  if (fillResult.filled > 0) {
+    repairs.push(`Filled ${fillResult.filled} of ${fillResult.holeCount} holes`)
+  }
+  if (fillResult.skippedLargeHoles > 0) {
+    repairs.push(`Skipped ${fillResult.skippedLargeHoles} large holes (>100 vertices)`)
+  }
+
+  // 7. Detect self-intersections (detection only, no fix)
+  const selfIntersectResult = detectSelfIntersections(newVertices, fillResult.triangles, true)
+  if (selfIntersectResult.skipped) {
+    repairs.push(`Self-intersection check: ${selfIntersectResult.reason}`)
+  } else if (selfIntersectResult.hasIntersections) {
+    repairs.push(`Warning: ${selfIntersectResult.count} self-intersecting triangle pairs detected`)
   }
 
   return {
     vertices: newVertices,
-    triangles: uniqueTriangles,
+    triangles: fillResult.triangles,
     repairs
   }
 }
@@ -612,21 +1221,31 @@ function mergeFaces(oc, shape, tolerance = 0.1) {
 /**
  * Process a single mesh/shape and create solid
  * Includes large mesh optimization and repair tracking
+ *
+ * Tolerance scaling (like FreeCAD):
+ * - Base tolerance: user-specified tolerance
+ * - Sewing tolerance: base * 5
+ * - Merge tolerance: base * 10
  */
 function processShape(oc, shape, options = {}) {
   const {
     tolerance = 0.1,
     repair = true,
     mergeFacesOpt = true,
+    skipMerge: forceSkipMerge = false,
     faceCount = 0
   } = options
+
+  // Apply tolerance scaling like FreeCAD
+  const sewingTolerance = tolerance * 5   // 5x for sewing operations
+  const mergeTolerance = tolerance * 10   // 10x for face merging
 
   const repairs = []
   let processedShape = shape
 
   // Check for large mesh optimizations
   const skipExpensive = faceCount > LARGE_MESH_THRESHOLD
-  const skipMerge = faceCount > VERY_LARGE_MESH_THRESHOLD
+  const skipMerge = forceSkipMerge || faceCount > VERY_LARGE_MESH_THRESHOLD
 
   if (skipExpensive) {
     self.postMessage({
@@ -639,8 +1258,8 @@ function processShape(oc, shape, options = {}) {
   // Sewing
   self.postMessage({ type: 'progress', message: 'Sewing faces...' })
   try {
-    const sewingTolerance = skipExpensive ? tolerance * 2 : tolerance
-    const sewing = new oc.BRepBuilderAPI_Sewing(sewingTolerance, true, true, true, false)
+    const actualSewingTolerance = skipExpensive ? sewingTolerance * 2 : sewingTolerance
+    const sewing = new oc.BRepBuilderAPI_Sewing(actualSewingTolerance, true, true, true, false)
     sewing.Add(processedShape)
     sewing.Perform(new oc.Message_ProgressRange_1())
     processedShape = sewing.SewedShape()
@@ -698,10 +1317,12 @@ function processShape(oc, shape, options = {}) {
     repairs.push('Solid creation skipped (using shell)')
   }
 
-  // Merge faces (skip for very large meshes)
+  // Merge faces (skip for very large meshes or if explicitly skipped)
   if (mergeFacesOpt && !skipMerge) {
-    const mergeResult = mergeFacesWithFallback(oc, solidShape, tolerance, repairs)
+    const mergeResult = mergeFacesWithFallback(oc, solidShape, mergeTolerance, repairs)
     solidShape = mergeResult.shape
+  } else if (forceSkipMerge) {
+    repairs.push('Face merging skipped (user option)')
   } else if (mergeFacesOpt && skipMerge) {
     self.postMessage({
       type: 'progress',
@@ -772,20 +1393,156 @@ self.onmessage = async function(e) {
   const { type, data } = e.data
 
   if (type === 'analyze') {
-    // Mesh analysis only
+    // Enhanced mesh analysis with JS-level quality checks
     try {
+      const { fileData, fileName = 'input.stl' } = data
+
       if (!ocInstance) {
         ocInstance = await initOpenCascade()
       }
       const oc = ocInstance
 
-      const stlArray = new Uint8Array(data.fileData)
-      oc.FS.writeFile('/input.stl', stlArray)
+      const is3MF = fileName.toLowerCase().endsWith('.3mf')
+      let vertices = []
+      let triangles = []
+      let totalTriangles = 0
+      let shape = null
 
-      const shape = readStl(oc, '/input.stl')
-      const stats = analyzeMesh(oc, shape)
+      if (is3MF) {
+        self.postMessage({ type: 'progress', message: 'Parsing 3MF file for analysis...' })
+        const meshes = await parse3MF(fileData)
 
-      oc.FS.unlink('/input.stl')
+        // Combine all meshes for analysis
+        let vertexOffset = 0
+        for (const mesh of meshes) {
+          if (mesh.isStl) {
+            // For embedded STL, we'd need to parse it - for now skip JS analysis
+            continue
+          }
+          if (mesh.vertices && mesh.triangles) {
+            // Add vertices
+            for (const v of mesh.vertices) {
+              vertices.push(v)
+            }
+            // Add triangles with offset indices
+            for (const tri of mesh.triangles) {
+              triangles.push({
+                v1: tri.v1 + vertexOffset,
+                v2: tri.v2 + vertexOffset,
+                v3: tri.v3 + vertexOffset
+              })
+            }
+            vertexOffset += mesh.vertices.length
+          }
+        }
+        totalTriangles = triangles.length
+
+        // Convert first mesh to STL for OC analysis
+        if (meshes.length > 0) {
+          const firstMesh = meshes[0]
+          let stlData
+          if (firstMesh.isStl) {
+            stlData = firstMesh.stlData
+          } else {
+            stlData = meshToStl(firstMesh)
+          }
+          oc.FS.writeFile('/input.stl', stlData)
+          shape = readStl(oc, '/input.stl')
+        }
+      } else {
+        self.postMessage({ type: 'progress', message: 'Analyzing STL file...' })
+        const stlArray = new Uint8Array(fileData)
+        oc.FS.writeFile('/input.stl', stlArray)
+        shape = readStl(oc, '/input.stl')
+
+        // Get triangle count from binary STL header
+        if (fileData.byteLength > 84) {
+          const view = new DataView(fileData)
+          totalTriangles = view.getUint32(80, true)
+        }
+
+        // Parse STL data to get vertices and triangles for JS analysis
+        // Binary STL format
+        if (fileData.byteLength > 84) {
+          const view = new DataView(fileData)
+          const numTris = view.getUint32(80, true)
+          let offset = 84
+
+          for (let i = 0; i < numTris && offset + 50 <= fileData.byteLength; i++) {
+            // Skip normal (12 bytes)
+            offset += 12
+
+            // Read 3 vertices
+            const v1Idx = vertices.length
+            for (let j = 0; j < 3; j++) {
+              vertices.push({
+                x: view.getFloat32(offset, true),
+                y: view.getFloat32(offset + 4, true),
+                z: view.getFloat32(offset + 8, true)
+              })
+              offset += 12
+            }
+
+            triangles.push({
+              v1: v1Idx,
+              v2: v1Idx + 1,
+              v3: v1Idx + 2
+            })
+
+            // Skip attribute byte count
+            offset += 2
+          }
+        }
+      }
+
+      // Get OpenCascade stats
+      const stats = shape ? analyzeMesh(oc, shape, totalTriangles) : {
+        triangleCount: totalTriangles,
+        qualityIssues: []
+      }
+
+      // Add JS-level quality checks
+      if (triangles.length > 0) {
+        self.postMessage({ type: 'progress', message: 'Running quality checks...' })
+
+        // Check for holes (boundary edges)
+        const boundaryEdges = findBoundaryEdges(triangles)
+        const holes = groupBoundaryEdgesIntoLoops(boundaryEdges)
+        stats.holeCount = holes.length
+        if (holes.length > 0) {
+          stats.qualityIssues.push(`Found ${holes.length} hole(s) in mesh`)
+        }
+
+        // Check for non-manifold edges
+        const nonManifoldResult = detectNonManifolds(triangles)
+        stats.nonManifoldEdgeCount = nonManifoldResult.count
+        if (nonManifoldResult.hasNonManifolds) {
+          stats.qualityIssues.push(`Found ${nonManifoldResult.count} non-manifold edge(s)`)
+        }
+
+        // Check for self-intersections (only on smaller meshes)
+        const selfIntersectResult = detectSelfIntersections(vertices, triangles, true)
+        if (selfIntersectResult.skipped) {
+          stats.selfIntersections = 'skipped (large mesh)'
+        } else {
+          stats.selfIntersectionCount = selfIntersectResult.count
+          if (selfIntersectResult.hasIntersections) {
+            stats.qualityIssues.push(`Found ${selfIntersectResult.count} self-intersecting triangle pair(s)`)
+          }
+        }
+
+        // Add mesh complexity info
+        stats.jsAnalyzed = true
+        stats.analyzedTriangles = triangles.length
+        stats.analyzedVertices = vertices.length
+      }
+
+      // Cleanup
+      try {
+        oc.FS.unlink('/input.stl')
+      } catch (e) {
+        // File may not exist
+      }
 
       self.postMessage({ type: 'analysis', data: stats })
     } catch (error) {
@@ -804,7 +1561,8 @@ self.onmessage = async function(e) {
         outputFormat = 'step',
         tolerance = 0.1,
         repair = true,
-        mergeFaces: mergeFacesOpt = true
+        mergeFaces: mergeFacesOpt = true,
+        skipMerge = false
       } = data
 
       if (!ocInstance) {
@@ -871,6 +1629,7 @@ self.onmessage = async function(e) {
             tolerance,
             repair,
             mergeFacesOpt,
+            skipMerge,
             faceCount
           })
           shapes.push(processResult.shape)
@@ -903,6 +1662,7 @@ self.onmessage = async function(e) {
           tolerance,
           repair,
           mergeFacesOpt,
+          skipMerge,
           faceCount: beforeStats.faceCount || totalTriangles
         })
         shapes.push(processResult.shape)

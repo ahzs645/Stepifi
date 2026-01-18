@@ -8,7 +8,7 @@ export const Route = createFileRoute('/')({
   component: Home,
 })
 
-type ConversionStatus = 'idle' | 'loading-occt' | 'converting' | 'done' | 'error'
+type ConversionStatus = 'idle' | 'loading-occt' | 'converting' | 'analyzing' | 'analyzed' | 'done' | 'error'
 
 interface ConversionResult {
   blob: Blob | null
@@ -90,6 +90,38 @@ function StatsColumn({ title, stats, color }: { title: string; stats: MeshStats;
             </span>
           </div>
         )}
+        {stats.holeCount !== undefined && stats.holeCount > 0 && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500">Holes:</span>
+            <span className="text-xs px-2 py-0.5 rounded bg-yellow-900/50 text-yellow-400">
+              {stats.holeCount}
+            </span>
+          </div>
+        )}
+        {stats.nonManifoldEdgeCount !== undefined && stats.nonManifoldEdgeCount > 0 && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500">Non-manifold:</span>
+            <span className="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-400">
+              {stats.nonManifoldEdgeCount} edges
+            </span>
+          </div>
+        )}
+        {stats.selfIntersectionCount !== undefined && stats.selfIntersectionCount > 0 && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500">Self-intersect:</span>
+            <span className="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-400">
+              {stats.selfIntersectionCount} pairs
+            </span>
+          </div>
+        )}
+        {stats.selfIntersections === 'skipped (large mesh)' && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500">Self-intersect:</span>
+            <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400">
+              Skipped
+            </span>
+          </div>
+        )}
       </div>
       {stats.qualityIssues && stats.qualityIssues.length > 0 && (
         <div className="mt-3 pt-3 border-t border-gray-700">
@@ -121,6 +153,7 @@ function Home() {
   const [tolerance, setTolerance] = useState(0.1)
   const [repair, setRepair] = useState(true)
   const [mergeFaces, setMergeFaces] = useState(true)
+  const [skipMerge, setSkipMerge] = useState(false)
 
   const processFile = useCallback(async (file: File) => {
     setFileName(file.name)
@@ -192,6 +225,7 @@ function Home() {
         tolerance,
         repair,
         mergeFaces,
+        skipMerge,
       }
 
       const conversionResult = await convertFile(
@@ -230,7 +264,43 @@ function Home() {
       })
       setProgress('')
     }
-  }, [fileData, fileName, outputFormat, tolerance, repair, mergeFaces])
+  }, [fileData, fileName, outputFormat, tolerance, repair, mergeFaces, skipMerge])
+
+  const handleAnalyze = useCallback(async () => {
+    if (!fileData || !fileName) return
+
+    setStatus('loading-occt')
+    setProgress('Loading OpenCascade.js (~9MB)...')
+    setBeforeStats(null)
+    setAfterStats(null)
+    setRepairs([])
+
+    try {
+      const { analyzeFile } = await import('~/lib/converter')
+
+      setStatus('analyzing')
+      setProgress('Analyzing mesh...')
+
+      const stats = await analyzeFile(
+        fileData,
+        fileName,
+        (msg) => setProgress(msg),
+      )
+
+      setBeforeStats(stats)
+      setStatus('analyzed')
+      setProgress('Analysis complete!')
+    } catch (err) {
+      setStatus('error')
+      setResult({
+        blob: null,
+        fileName: '',
+        format: 'step',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      })
+      setProgress('')
+    }
+  }, [fileData, fileName])
 
   const handleDownload = useCallback(() => {
     if (!result?.blob) return
@@ -445,21 +515,53 @@ function Home() {
                   />
                 </button>
               </div>
+
+              {/* Skip Merge Toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm text-gray-300">Skip Face Merge</label>
+                  <p className="text-xs text-gray-500">Faster but larger STEP files</p>
+                </div>
+                <button
+                  onClick={() => setSkipMerge(!skipMerge)}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    skipMerge ? 'bg-indigo-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full transition-transform ${
+                      skipMerge ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Convert Button */}
+        {/* Convert & Analyze Buttons */}
         {fileData && status !== 'done' && (
-          <button
-            onClick={handleConvert}
-            disabled={status === 'loading-occt' || status === 'converting'}
-            className="w-full py-4 px-6 text-lg font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {status === 'idle' || status === 'error'
-              ? `Convert to ${outputFormat.toUpperCase()}`
-              : progress}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleConvert}
+              disabled={status === 'loading-occt' || status === 'converting' || status === 'analyzing'}
+              className="flex-1 py-4 px-6 text-lg font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {status === 'idle' || status === 'error' || status === 'analyzed'
+                ? `Convert to ${outputFormat.toUpperCase()}`
+                : status === 'analyzing'
+                  ? progress
+                  : progress}
+            </button>
+            <button
+              onClick={handleAnalyze}
+              disabled={status === 'loading-occt' || status === 'converting' || status === 'analyzing'}
+              className="py-4 px-6 text-lg font-semibold text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Analyze mesh quality without converting"
+            >
+              {status === 'analyzing' ? 'Analyzing...' : 'Analyze Only'}
+            </button>
+          </div>
         )}
 
         {/* Error Display */}
