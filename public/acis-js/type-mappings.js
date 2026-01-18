@@ -263,5 +263,27 @@ export const RECORD_2_ENTITY = {
 // Curve and Surface Type Handlers (re-export from curves.js and surfaces.js)
 // ============================================================================
 
-export { CURVE_TYPES } from './curves.js'
+export { CURVE_TYPES, CURVE_SET_DATA, PCURVE_SET_DATA } from './curves.js'
 export { SURFACE_TYPES } from './surfaces.js'
+
+// ============================================================================
+// Utility Functions for Type Resolution
+// ============================================================================
+
+/**
+ * Get entity class for a record name
+ * @param {string} name - Record name
+ * @returns {Function|null} Entity class constructor or null
+ */
+export function getEntityClass(name) {
+  return RECORD_2_ENTITY[name] || null
+}
+
+/**
+ * Check if a record name is known
+ * @param {string} name - Record name
+ * @returns {boolean}
+ */
+export function isKnownRecordType(name) {
+  return name in RECORD_2_ENTITY
+}

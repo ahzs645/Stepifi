@@ -56,6 +56,66 @@ export * from './reader.js'
 // Type mappings
 export * from './type-mappings.js'
 
+// Geometry builder for OpenCascade.js
+export * from './geometry-builder.js'
+
+// ============================================================================
+// Circular Dependency Resolution
+// ============================================================================
+
+import { setCurveReader, setSurfaceReader, setLawReader } from './surfaces.js'
+import {
+  readCurve as splineReadCurve,
+  readSurface as splineReadSurface,
+  readLaw as splineReadLaw,
+  setCurveClasses,
+  setSurfaceClasses,
+  setTransformClass
+} from './spline.js'
+
+// Initialize surfaces.js with curve/surface reader functions from spline.js
+setCurveReader(splineReadCurve)
+setSurfaceReader(splineReadSurface)
+setLawReader(splineReadLaw)
+
+// Import classes for CURVES and SURFACES mappings
+import { Transform } from './entity.js'
+import {
+  CurveComp, CurveDegenerate, CurveEllipse, CurveInt, CurveIntInt, CurveP, CurveStraight
+} from './curves.js'
+import {
+  SurfaceCone, SurfaceMesh, SurfacePlane, SurfaceSphere, SurfaceSpline, SurfaceTorus
+} from './surfaces.js'
+
+// CURVES mapping (Python Acis.py lines 5342-5352)
+const CURVES = {
+  'compcurv': CurveComp,
+  'degenerate_curve': CurveDegenerate,
+  'ellipse': CurveEllipse,
+  'intcurve': CurveInt,
+  'intcurve-intcurve': CurveIntInt,
+  'pcurve': CurveP,
+  'straight': CurveStraight,
+  'null_curve': null,
+  'null_pcurve': null
+}
+
+// SURFACES mapping (Python Acis.py lines 5354-5362)
+const SURFACES = {
+  'cone': SurfaceCone,
+  'mesh': SurfaceMesh,
+  'plane': SurfacePlane,
+  'sphere': SurfaceSphere,
+  'spline': SurfaceSpline,
+  'torus': SurfaceTorus,
+  'null_surface': null
+}
+
+// Initialize spline.js with class mappings
+setCurveClasses(CURVES)
+setSurfaceClasses(SURFACES)
+setTransformClass(Transform)
+
 // ============================================================================
 // Convenience Functions
 // ============================================================================
@@ -63,6 +123,7 @@ export * from './type-mappings.js'
 import { AcisReader } from './reader.js'
 import { RECORD_2_ENTITY } from './type-mappings.js'
 import { extractColor, extractName } from './attributes.js'
+import { buildWithOpenCascade } from './geometry-builder.js'
 
 /**
  * Parse ACIS binary data and return bodies
@@ -115,6 +176,17 @@ export function parseAcis(data) {
 }
 
 /**
+ * Parse ACIS data and build geometry with OpenCascade.js
+ * @param {Object} oc - OpenCascade.js instance
+ * @param {ArrayBuffer|Uint8Array|string} data - ACIS data
+ * @returns {Object|null} OpenCascade.js shape (compound or shell)
+ */
+export function parseAndBuild(oc, data) {
+  const bodies = parseAcis(data)
+  return buildWithOpenCascade(oc, bodies)
+}
+
+/**
  * Get all faces from bodies
  * @param {Array} bodies - Array of Body entities
  * @returns {Array} Array of Face entities
@@ -122,9 +194,12 @@ export function parseAcis(data) {
 export function getAllFaces(bodies) {
   const faces = []
   for (const body of bodies) {
-    for (const lump of body.getLumps()) {
-      for (const shell of lump.getShells()) {
-        faces.push(...shell.getFaces())
+    const lumps = body.getLumps ? body.getLumps() : []
+    for (const lump of lumps) {
+      const shells = lump.getShells ? lump.getShells() : []
+      for (const shell of shells) {
+        const shellFaces = shell.getFaces ? shell.getFaces() : []
+        faces.push(...shellFaces)
       }
     }
   }
@@ -141,12 +216,17 @@ export function getAllEdges(bodies) {
   const seen = new Set()
 
   for (const body of bodies) {
-    for (const lump of body.getLumps()) {
-      for (const shell of lump.getShells()) {
-        for (const face of shell.getFaces()) {
-          for (const loop of face.getLoops()) {
-            for (const coedge of loop.getCoedges()) {
-              const edge = coedge.getEdge()
+    const lumps = body.getLumps ? body.getLumps() : []
+    for (const lump of lumps) {
+      const shells = lump.getShells ? lump.getShells() : []
+      for (const shell of shells) {
+        const faces = shell.getFaces ? shell.getFaces() : []
+        for (const face of faces) {
+          const loops = face.getLoops ? face.getLoops() : []
+          for (const loop of loops) {
+            const coedges = loop.getCoedges ? loop.getCoedges() : []
+            for (const coedge of coedges) {
+              const edge = coedge.getEdge ? coedge.getEdge() : null
               if (edge && !seen.has(edge.index)) {
                 seen.add(edge.index)
                 edges.push(edge)
@@ -161,22 +241,162 @@ export function getAllEdges(bodies) {
 }
 
 /**
+ * Get all surfaces from bodies
+ * @param {Array} bodies - Array of Body entities
+ * @returns {Array} Array of Surface entities
+ */
+export function getAllSurfaces(bodies) {
+  const surfaces = []
+  const seen = new Set()
+
+  for (const face of getAllFaces(bodies)) {
+    const surface = face.getSurface ? face.getSurface() : null
+    if (surface && !seen.has(surface.index)) {
+      seen.add(surface.index)
+      surfaces.push(surface)
+    }
+  }
+  return surfaces
+}
+
+/**
+ * Get all curves from bodies
+ * @param {Array} bodies - Array of Body entities
+ * @returns {Array} Array of Curve entities
+ */
+export function getAllCurves(bodies) {
+  const curves = []
+  const seen = new Set()
+
+  for (const edge of getAllEdges(bodies)) {
+    const curve = edge.getCurve ? edge.getCurve() : null
+    if (curve && !seen.has(curve.index)) {
+      seen.add(curve.index)
+      curves.push(curve)
+    }
+  }
+  return curves
+}
+
+/**
  * Extract color from entity attribute chain
  */
 export { extractColor, extractName }
+
+/**
+ * Build geometry with OpenCascade.js
+ */
+export { buildWithOpenCascade }
+
+// ============================================================================
+// Inventor Loader Exports (IPT/IAM/F3D Support)
+// ============================================================================
+
+// Main IPT/IAM/F3D entry point
+export {
+  readIPT,
+  importIPT,
+  convertIPTToSTEP,
+  detectFileType
+} from './import-ipt.js'
+
+// F3D (Fusion 360) file handler
+export {
+  readF3D,
+  importF3D,
+  isZipFile
+} from './importer-f3d.js'
+
+// OLE compound document reader (for IPT/IAM files)
+export {
+  OLEFile,
+  readOLE,
+  isOLEFile,
+  decompress,
+  decompressAsync
+} from './importer-ole.js'
+
+// OpenCascade.js integration utilities
+export {
+  createGroup,
+  addToGroup,
+  createBody,
+  Material,
+  materialStore,
+  applyMaterial,
+  getMaterial,
+  toPoint,
+  toVector,
+  toDirection,
+  toAxis,
+  toAxis2,
+  makeLine,
+  makeCircle,
+  makeArc,
+  makeWire,
+  makeFace,
+  makeExtrusion,
+  makeRevolution,
+  booleanUnion,
+  booleanCut,
+  booleanIntersection,
+  generateMesh,
+  exportSTEP,
+  exportBREP
+} from './importer-opencascade.js'
+
+// Inventor Loader utilities (for advanced users)
+export * from './importer-utils.js'
+export * from './importer-constants.js'
+export * from './importer-classes.js'
+export * from './importer-transformation.js'
 
 // ============================================================================
 // Default Export
 // ============================================================================
 
+// Import Inventor Loader functions for default export
+import {
+  readIPT,
+  importIPT,
+  convertIPTToSTEP,
+  detectFileType
+} from './import-ipt.js'
+
+import {
+  readF3D,
+  importF3D
+} from './importer-f3d.js'
+
 export default {
+  // Reader
   AcisReader,
   RECORD_2_ENTITY,
+
+  // Parsing functions
   parseAcis,
   parseAcisBinary,
   parseAcisText,
+  parseAndBuild,
+
+  // Entity traversal
   getAllFaces,
   getAllEdges,
+  getAllSurfaces,
+  getAllCurves,
+
+  // Attribute extraction
   extractColor,
-  extractName
+  extractName,
+
+  // Geometry building
+  buildWithOpenCascade,
+
+  // Inventor Loader (IPT/IAM/F3D)
+  readIPT,
+  importIPT,
+  convertIPTToSTEP,
+  detectFileType,
+  readF3D,
+  importF3D
 }

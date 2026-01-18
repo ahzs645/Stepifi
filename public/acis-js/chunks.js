@@ -12,7 +12,6 @@ import {
   TAG_POSITION, TAG_VECTOR_3D, TAG_ENUM_VALUE, TAG_VECTOR_2D,
   TAG_INT64, BOOLEAN
 } from './constants.js'
-import { getReader } from './utils.js'
 
 // ============================================================================
 // Binary Reading Helpers
@@ -37,7 +36,7 @@ export function getSInt16(data, offset) {
 }
 
 export function getUInt32(data, offset) {
-  // Need parentheses to apply >>> 0 to the whole expression, not just the last term
+  // Wrap in parentheses so >>> 0 applies to entire expression (not just last term)
   return [
     (data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24)) >>> 0,
     offset + 4
@@ -425,10 +424,6 @@ export const ACIS_VALUE_CHUNKS = {
 // ============================================================================
 
 export function createChunk(tag, data, offset, scale = 1.0) {
-  // Get the reader to check for 64-bit mode
-  const reader = getReader()
-  const getSLong = reader ? reader._getSLong : getSInt32
-
   if (tag === TAG_TRUE) {
     return [new AcisChunkEnumValue(TAG_TRUE, true, BOOLEAN), offset]
   }
@@ -436,40 +431,20 @@ export function createChunk(tag, data, offset, scale = 1.0) {
     return [new AcisChunkEnumValue(TAG_FALSE, false, BOOLEAN), offset]
   }
   if (tag === TAG_ENTITY_REF) {
-    // Entity refs use the current long size (32 or 64 bit)
-    const [val, o1] = getSLong(data, offset)
+    const [val, o1] = getSInt64(data, offset)
     const chunk = new AcisChunkEntityRef(val)
     return [chunk, o1]
   }
   if (tag === TAG_ENUM_VALUE) {
-    // In 64-bit mode, enum values are stored as 64-bit integers
-    // Otherwise as UTF8 strings
-    const reader = getReader()
-    if (reader && reader._getSLong === getSInt64) {
-      // 64-bit mode: read as integer
-      const [val, o1] = getSLong(data, offset)
-      const chunk = new AcisChunkLong(val)
-      chunk.tag = TAG_ENUM_VALUE
-      chunk.type = 'enum'
-      return [chunk, o1]
-    } else {
-      // 32-bit mode: read as string
-      const chunk = new AcisChunkUtf8U8()
-      const o1 = chunk.read(data, offset)
-      chunk.tag = TAG_ENUM_VALUE
-      chunk.type = 'enum'
-      return [chunk, o1]
-    }
+    const chunk = new AcisChunkUtf8U8()
+    const o1 = chunk.read(data, offset)
+    chunk.tag = TAG_ENUM_VALUE
+    chunk.type = 'enum'
+    return [chunk, o1]
   }
   if (tag === TAG_POSITION) {
     const chunk = new AcisChunkPosition(scale)
     const o1 = chunk.read(data, offset)
-    return [chunk, o1]
-  }
-  // TAG_LONG uses the current long size (32 or 64 bit based on file format)
-  if (tag === TAG_LONG) {
-    const [val, o1] = getSLong(data, offset)
-    const chunk = new AcisChunkLong(val)
     return [chunk, o1]
   }
 

@@ -289,8 +289,84 @@ export { extractColor, extractName }
 export { buildWithOpenCascade }
 
 // ============================================================================
+// Inventor Loader Exports (IPT/IAM/F3D Support)
+// ============================================================================
+
+// Main IPT/IAM/F3D entry point
+export {
+  readIPT,
+  importIPT,
+  convertIPTToSTEP,
+  detectFileType
+} from './import-ipt.js'
+
+// F3D (Fusion 360) file handler
+export {
+  readF3D,
+  importF3D,
+  isZipFile
+} from './importer-f3d.js'
+
+// OLE compound document reader (for IPT/IAM files)
+export {
+  OLEFile,
+  readOLE,
+  isOLEFile,
+  decompress,
+  decompressAsync
+} from './importer-ole.js'
+
+// OpenCascade.js integration utilities
+export {
+  createGroup,
+  addToGroup,
+  createBody,
+  Material,
+  materialStore,
+  applyMaterial,
+  getMaterial,
+  toPoint,
+  toVector,
+  toDirection,
+  toAxis,
+  toAxis2,
+  makeLine,
+  makeCircle,
+  makeArc,
+  makeWire,
+  makeFace,
+  makeExtrusion,
+  makeRevolution,
+  booleanUnion,
+  booleanCut,
+  booleanIntersection,
+  generateMesh,
+  exportSTEP,
+  exportBREP
+} from './importer-opencascade.js'
+
+// Inventor Loader utilities (for advanced users)
+export * from './importer-utils.js'
+export * from './importer-constants.js'
+export * from './importer-classes.js'
+export * from './importer-transformation.js'
+
+// ============================================================================
 // Default Export
 // ============================================================================
+
+// Import Inventor Loader functions for default export
+import {
+  readIPT,
+  importIPT,
+  convertIPTToSTEP,
+  detectFileType
+} from './import-ipt.js'
+
+import {
+  readF3D,
+  importF3D
+} from './importer-f3d.js'
 
 export default {
   // Reader
@@ -314,5 +390,13 @@ export default {
   extractName,
 
   // Geometry building
-  buildWithOpenCascade
+  buildWithOpenCascade,
+
+  // Inventor Loader (IPT/IAM/F3D)
+  readIPT,
+  importIPT,
+  convertIPTToSTEP,
+  detectFileType,
+  readF3D,
+  importF3D
 }
