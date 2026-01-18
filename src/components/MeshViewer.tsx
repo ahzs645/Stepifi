@@ -306,13 +306,22 @@ export default function MeshViewer({ fileData, fileName }: MeshViewerProps) {
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isF3D, setIsF3D] = useState(false)
 
   useEffect(() => {
     async function loadGeometry() {
       setLoading(true)
       setError(null)
+      setIsF3D(false)
 
       try {
+        // F3D files contain B-rep geometry that requires full conversion for preview
+        if (fileName.toLowerCase().endsWith('.f3d')) {
+          setIsF3D(true)
+          setLoading(false)
+          return
+        }
+
         let geo: THREE.BufferGeometry
 
         if (fileName.toLowerCase().endsWith('.3mf')) {
@@ -338,6 +347,23 @@ export default function MeshViewer({ fileData, fileName }: MeshViewerProps) {
     return (
       <div className="h-full flex items-center justify-center text-gray-500">
         Loading 3D preview...
+      </div>
+    )
+  }
+
+  if (isF3D) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-gray-400 p-4">
+        <div className="text-4xl mb-4">🔧</div>
+        <div className="text-center">
+          <p className="font-medium text-gray-300">Fusion 360 File Detected</p>
+          <p className="text-sm mt-2">
+            F3D files contain parametric B-rep geometry.
+          </p>
+          <p className="text-sm text-gray-500 mt-1">
+            Preview will be generated during conversion.
+          </p>
+        </div>
       </div>
     )
   }

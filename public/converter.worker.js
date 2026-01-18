@@ -1,8 +1,12 @@
 /**
- * Web Worker for OpenCascade.js v2 STL/3MF to STEP/STL conversion
+ * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
- *           large mesh optimization, JavaScript mesh repairs, fallback strategies
+ *           large mesh optimization, JavaScript mesh repairs, fallback strategies,
+ *           F3D (Fusion 360) ACIS binary support
  */
+
+// Load F3D/ACIS support modules
+importScripts('/acis-parser.js', '/acis-geometry.js')
 
 let ocInstance = null
 
@@ -1403,12 +1407,25 @@ self.onmessage = async function(e) {
       const oc = ocInstance
 
       const is3MF = fileName.toLowerCase().endsWith('.3mf')
+      const isF3D = fileName.toLowerCase().endsWith('.f3d')
       let vertices = []
       let triangles = []
       let totalTriangles = 0
       let shape = null
 
-      if (is3MF) {
+      if (isF3D) {
+        // Analyze F3D file
+        self.postMessage({ type: 'progress', message: 'Parsing F3D file for analysis...' })
+
+        const bodies = await self.ACISParser.parseF3D(fileData, loadJSZip)
+        self.postMessage({ type: 'progress', message: 'Converting F3D geometry...' })
+
+        shape = self.ACISGeometry.convertACISBodiesToShape(oc, bodies)
+
+        if (!shape) {
+          throw new Error('Failed to convert F3D geometry for analysis')
+        }
+      } else if (is3MF) {
         self.postMessage({ type: 'progress', message: 'Parsing 3MF file for analysis...' })
         const meshes = await parse3MF(fileData)
 
@@ -1571,12 +1588,47 @@ self.onmessage = async function(e) {
       const oc = ocInstance
 
       const is3MF = fileName.toLowerCase().endsWith('.3mf')
+      const isF3D = fileName.toLowerCase().endsWith('.f3d')
       let shapes = []
       let beforeStats = null
       let totalTriangles = 0
       let allRepairs = []
 
-      if (is3MF) {
+      if (isF3D) {
+        // Parse F3D file (Fusion 360 ACIS format)
+        self.postMessage({ type: 'progress', message: 'Parsing F3D file...' })
+
+        // Use ACISParser from imported module
+        const bodies = await self.ACISParser.parseF3D(fileData, loadJSZip)
+
+        self.postMessage({ type: 'progress', message: `Found ${bodies.length} body/bodies in F3D` })
+
+        // Convert ACIS bodies to OpenCascade shapes
+        self.postMessage({ type: 'progress', message: 'Converting ACIS geometry to OpenCascade...' })
+
+        const shape = self.ACISGeometry.convertACISBodiesToShape(oc, bodies)
+
+        if (!shape) {
+          throw new Error('Failed to convert F3D geometry')
+        }
+
+        // Get before stats
+        beforeStats = analyzeMesh(oc, shape, 0)
+        beforeStats.note = 'F3D B-rep geometry'
+        self.postMessage({ type: 'beforeStats', data: beforeStats })
+
+        // Process the shape (sewing, repair, merge faces)
+        const processResult = processShape(oc, shape, {
+          tolerance,
+          repair,
+          mergeFacesOpt,
+          skipMerge,
+          faceCount: beforeStats.faceCount || 0
+        })
+        shapes.push(processResult.shape)
+        allRepairs.push(...processResult.repairs)
+
+      } else if (is3MF) {
         // Parse 3MF file
         self.postMessage({ type: 'progress', message: 'Parsing 3MF file...' })
         const meshes = await parse3MF(fileData)

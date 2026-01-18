@@ -190,8 +190,8 @@ export default function App() {
       const file = e.dataTransfer.files?.[0]
       if (!file) return
 
-      if (!file.name.match(/\.(stl|3mf)$/i)) {
-        alert('Please drop an STL or 3MF file')
+      if (!file.name.match(/\.(stl|3mf|f3d)$/i)) {
+        alert('Please drop an STL, 3MF, or F3D file')
         return
       }
 
@@ -235,7 +235,7 @@ export default function App() {
 
       const mimeType = conversionResult.format === 'step' ? 'application/step' : 'model/stl'
       const blob = new Blob([new Uint8Array(conversionResult.data).buffer as ArrayBuffer], { type: mimeType })
-      const baseName = fileName.replace(/\.(stl|3mf)$/i, '')
+      const baseName = fileName.replace(/\.(stl|3mf|f3d)$/i, '')
 
       // Update stats and repairs from result if available
       if (conversionResult.beforeStats) setBeforeStats(conversionResult.beforeStats)
@@ -319,7 +319,7 @@ export default function App() {
         <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
           Stepifi
         </h1>
-        <p className="text-gray-400 mt-2">Browser-based STL/3MF to STEP/STL converter</p>
+        <p className="text-gray-400 mt-2">Browser-based STL/3MF/F3D to STEP/STL converter</p>
         <p className="text-gray-500 text-sm mt-1">
           Powered by OpenCascade.js - runs entirely in your browser
         </p>
@@ -336,7 +336,7 @@ export default function App() {
           >
             <input
               type="file"
-              accept=".stl,.3mf"
+              accept=".stl,.3mf,.f3d"
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -353,7 +353,7 @@ export default function App() {
                 <>
                   <span className="text-3xl block mb-2">📁</span>
                   <span className="text-gray-400">
-                    Drop STL or 3MF file here or click to browse
+                    Drop STL, 3MF, or F3D file here or click to browse
                   </span>
                 </>
               )}
