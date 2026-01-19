@@ -26,8 +26,9 @@ const modules = [
   'utils.js',
   'type-mappings.js',
   'geometry-builder.js',
-  'importer-utils.js',
-  'importer-constants.js'
+  'importer-utils.js'
+  // Note: importer-constants.js excluded due to duplicate MIN_0/MIN_PI constants
+  // CONSTRAINT_TYPE is added directly in the F3D section below
 ]
 
 function removeExports(code) {
@@ -223,6 +224,8 @@ function getAllEdges(bodies) {
 // ============================================================================
 // F3D Importer Functions (from importer-f3d.js)
 // ============================================================================
+
+// Note: CONSTRAINT_TYPE is now defined in constants.js
 
 // F3D state
 let f3dSmbFiles = []

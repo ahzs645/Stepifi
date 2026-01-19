@@ -272,17 +272,22 @@ async function parseF3D(arrayBuffer, loadJSZip) {
   const zip = await JSZip.loadAsync(arrayBuffer)
   const files = Object.keys(zip.files)
 
-  const smbFiles = files.filter(f =>
-    f.toLowerCase().endsWith('.smb') || f.toLowerCase().endsWith('.smbh')
-  )
+  // Note: Reference implementation only processes .smbh files, not .smb files
+  // .smb files appear to use a different/unsupported format
+  const smbhFiles = files.filter(f => f.toLowerCase().endsWith('.smbh'))
+  const smbFiles = files.filter(f => f.toLowerCase().endsWith('.smb'))
 
-  if (smbFiles.length === 0) {
+  if (smbhFiles.length === 0 && smbFiles.length === 0) {
     throw new Error('No ACIS binary data (.smb/.smbh) found in F3D file')
+  }
+
+  if (smbFiles.length > 0) {
+    console.log('Skipping ' + smbFiles.length + ' .smb files (unsupported format)')
   }
 
   const allBodies = []
 
-  for (const smbFile of smbFiles) {
+  for (const smbFile of smbhFiles) {
     try {
       const smbData = await zip.file(smbFile).async('arraybuffer')
       const smbBytes = new Uint8Array(smbData)
