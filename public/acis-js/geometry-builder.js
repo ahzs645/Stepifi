@@ -10,10 +10,19 @@
 
 /**
  * Create OC.js gp_Pnt from point object
+ * Validates coordinates to prevent extreme/invalid values
  */
 export function makePoint(oc, p) {
   if (!p) return new oc.gp_Pnt_3(0, 0, 0)
-  return new oc.gp_Pnt_3(p.x || 0, p.y || 0, p.z || 0)
+  let x = p.x || 0
+  let y = p.y || 0
+  let z = p.z || 0
+  // Clamp extreme values to prevent 2e+100 type issues
+  const MAX_COORD = 1e10
+  if (!isFinite(x) || Math.abs(x) > MAX_COORD) x = 0
+  if (!isFinite(y) || Math.abs(y) > MAX_COORD) y = 0
+  if (!isFinite(z) || Math.abs(z) > MAX_COORD) z = 0
+  return new oc.gp_Pnt_3(x, y, z)
 }
 
 /**
@@ -119,7 +128,9 @@ export function createCircle(oc, center, axis, radius) {
 
   try {
     const ax2 = makeAx2(oc, center, axis)
-    return new oc.Geom_Circle_2(ax2, radius)
+    // gp_Circ_2(ax2, radius) -> Geom_Circle_1(gp_Circ)
+    const gpCirc = new oc.gp_Circ_2(ax2, radius)
+    return new oc.Geom_Circle_1(gpCirc)
   } catch (e) {
     console.warn('createCircle failed:', e.message)
   }
@@ -134,7 +145,9 @@ export function createEllipse(oc, center, axis, majorRadius, minorRadius, majorD
 
   try {
     const ax2 = makeAx2(oc, center, axis, majorDir)
-    return new oc.Geom_Ellipse_1(ax2, majorRadius, minorRadius)
+    // gp_Elips_2(ax2, majorRadius, minorRadius) -> Geom_Ellipse_1(gp_Elips)
+    const gpElips = new oc.gp_Elips_2(ax2, majorRadius, minorRadius)
+    return new oc.Geom_Ellipse_1(gpElips)
   } catch (e) {
     console.warn('createEllipse failed:', e.message)
   }
@@ -146,13 +159,23 @@ export function createEllipse(oc, center, axis, majorRadius, minorRadius, majorD
 // ============================================================================
 
 /**
+ * Validate and clamp coordinate value
+ */
+function clampCoord(val) {
+  const MAX_COORD = 1e10
+  const v = val || 0
+  if (!isFinite(v) || Math.abs(v) > MAX_COORD) return 0
+  return v
+}
+
+/**
  * Convert poles array to TColgp_Array1OfPnt
  */
 function polesToArray1OfPnt(oc, poles) {
   const arr = new oc.TColgp_Array1OfPnt_2(1, poles.length)
   for (let i = 0; i < poles.length; i++) {
     const p = poles[i]
-    arr.SetValue(i + 1, new oc.gp_Pnt_3(p.x || 0, p.y || 0, p.z || 0))
+    arr.SetValue(i + 1, new oc.gp_Pnt_3(clampCoord(p.x), clampCoord(p.y), clampCoord(p.z)))
   }
   return arr
 }
@@ -167,7 +190,7 @@ function polesToArray1OfPnt2d(oc, poles) {
     // Handle both {x,y} and {u,v} formats
     const u = p.x !== undefined ? p.x : (p.u !== undefined ? p.u : 0)
     const v = p.y !== undefined ? p.y : (p.v !== undefined ? p.v : 0)
-    arr.SetValue(i + 1, new oc.gp_Pnt2d_3(u, v))
+    arr.SetValue(i + 1, new oc.gp_Pnt2d_3(clampCoord(u), clampCoord(v)))
   }
   return arr
 }
@@ -319,7 +342,7 @@ function polesToArray2OfPnt(oc, poles) {
   for (let u = 0; u < uSize; u++) {
     for (let v = 0; v < vSize; v++) {
       const p = poles[u][v]
-      arr.SetValue(u + 1, v + 1, new oc.gp_Pnt_3(p.x || 0, p.y || 0, p.z || 0))
+      arr.SetValue(u + 1, v + 1, new oc.gp_Pnt_3(clampCoord(p.x), clampCoord(p.y), clampCoord(p.z)))
     }
   }
   return arr
@@ -931,9 +954,13 @@ export function convertACISCurve(oc, curveEntity, startPt, endPt) {
       const ax2 = new oc.gp_Ax2_2(center, normal, majorAxis)
 
       if (Math.abs(ratio - 1.0) < 1e-6) {
-        return new oc.Geom_Circle_2(ax2, majorRadius)
+        // gp_Circ_2(ax2, radius) -> Geom_Circle_1(gp_Circ)
+        const gpCirc = new oc.gp_Circ_2(ax2, majorRadius)
+        return new oc.Geom_Circle_1(gpCirc)
       } else {
-        return new oc.Geom_Ellipse_1(ax2, majorRadius, minorRadius)
+        // gp_Elips_2(ax2, majorRadius, minorRadius) -> Geom_Ellipse_1(gp_Elips)
+        const gpElips = new oc.gp_Elips_2(ax2, majorRadius, minorRadius)
+        return new oc.Geom_Ellipse_1(gpElips)
       }
     } else if ((typeName.includes('intcurve') || typeName.includes('spline')) && curveEntity.nubs) {
       return createBSplineCurve(oc, curveEntity.nubs, 'forward', typeName)
@@ -1054,6 +1081,7 @@ export function convertACISLoop(oc, loopEntity) {
     if (coedges.length === 0) return null
 
     const wireBuilder = new oc.BRepBuilderAPI_MakeWire_1()
+    let edgesAdded = 0
 
     for (const coedge of coedges) {
       const edgeEntity = coedge.getEdge ? coedge.getEdge() : null
@@ -1064,12 +1092,30 @@ export function convertACISLoop(oc, loopEntity) {
         if (coedge.sense === 'reversed') {
           edge.Reverse()
         }
-        wireBuilder.Add_1(edge)
+        try {
+          wireBuilder.Add_1(edge)
+          edgesAdded++
+        } catch (e) {
+          // Edge might not connect - continue with other edges
+        }
       }
     }
 
+    // Wire needs at least one edge
+    if (edgesAdded === 0) return null
+
     if (wireBuilder.IsDone()) {
       return wireBuilder.Wire()
+    } else {
+      // Try to get partial wire
+      try {
+        const wire = wireBuilder.Wire()
+        if (wire && !wire.IsNull()) {
+          return wire
+        }
+      } catch (e) {
+        // Ignore
+      }
     }
   } catch (e) {
     console.warn('Failed to convert loop:', e.message)
@@ -1088,7 +1134,6 @@ export function convertACISFace(oc, faceEntity) {
     const surface = convertACISSurface(oc, surfaceEntity)
 
     if (!surface) {
-      console.warn('No surface for face, skipping')
       return null
     }
 
@@ -1123,15 +1168,63 @@ export function convertACISFace(oc, faceEntity) {
             return result
           }
         } catch (e) {
-          console.warn('Failed to create bounded face:', e.message)
+          // Wire-based face failed, try UV bounds approach
         }
       }
     }
 
-    // Don't create unbounded faces - they have infinite extents
-    console.warn('No valid loops for face, skipping (unbounded faces not supported)')
+    // Try to create bounded face using UV parameters from surface
+    // This works for surfaces that have natural bounds (like B-splines with finite domains)
+    try {
+      // Get UV bounds from surface
+      let uMin = -1e6, uMax = 1e6, vMin = -1e6, vMax = 1e6
+
+      // For B-spline surfaces, use knot ranges
+      if (surfaceEntity && surfaceEntity.nubs) {
+        const nubs = surfaceEntity.nubs
+        if (nubs.uKnots && nubs.uKnots.length >= 2) {
+          uMin = nubs.uKnots[0]
+          uMax = nubs.uKnots[nubs.uKnots.length - 1]
+        }
+        if (nubs.vKnots && nubs.vKnots.length >= 2) {
+          vMin = nubs.vKnots[0]
+          vMax = nubs.vKnots[nubs.vKnots.length - 1]
+        }
+      }
+
+      // For other parametric surfaces, check if they have ranges
+      if (surfaceEntity && surfaceEntity.range) {
+        const range = surfaceEntity.range
+        if (range.uRange) {
+          uMin = range.uRange.lower
+          uMax = range.uRange.upper
+        }
+        if (range.vRange) {
+          vMin = range.vRange.lower
+          vMax = range.vRange.upper
+        }
+      }
+
+      // Only create bounded face if we have reasonable bounds
+      const MAX_PARAM = 1e5
+      if (Math.abs(uMin) < MAX_PARAM && Math.abs(uMax) < MAX_PARAM &&
+          Math.abs(vMin) < MAX_PARAM && Math.abs(vMax) < MAX_PARAM &&
+          uMax > uMin && vMax > vMin) {
+        // BRepBuilderAPI_MakeFace_9 takes (Handle_Geom_Surface, umin, umax, vmin, vmax, tolerance)
+        const faceBuilder = new oc.BRepBuilderAPI_MakeFace_9(handleSurface, uMin, uMax, vMin, vMax, 1e-6)
+        if (faceBuilder.IsDone()) {
+          const result = faceBuilder.Face()
+          if (faceEntity.sense === 'reversed') result.Reverse()
+          return result
+        }
+      }
+    } catch (e) {
+      // UV bounds approach also failed
+    }
+
+    // Skip faces without valid bounds
   } catch (e) {
-    console.warn('Failed to create face:', e.message)
+    // Face creation failed entirely
   }
   return null
 }
@@ -1151,11 +1244,35 @@ export function convertACISShell(oc, shellEntity) {
     shellBuilder.MakeShell(shell)
 
     let faceCount = 0
+    let skippedFaces = 0
     for (const faceEntity of faces) {
       const face = convertACISFace(oc, faceEntity)
       if (face) {
-        shellBuilder.Add(shell, face)
-        faceCount++
+        // Validate face bounding box before adding
+        try {
+          const bndBox = new oc.Bnd_Box_1()
+          oc.BRepBndLib.Add(face, bndBox, false)
+
+          if (!bndBox.IsVoid()) {
+            const xMin = { current: 0 }, yMin = { current: 0 }, zMin = { current: 0 }
+            const xMax = { current: 0 }, yMax = { current: 0 }, zMax = { current: 0 }
+            bndBox.Get(xMin, yMin, zMin, xMax, yMax, zMax)
+
+            const MAX_EXTENT = 1e10
+            if (Math.abs(xMin.current) < MAX_EXTENT && Math.abs(xMax.current) < MAX_EXTENT &&
+                Math.abs(yMin.current) < MAX_EXTENT && Math.abs(yMax.current) < MAX_EXTENT &&
+                Math.abs(zMin.current) < MAX_EXTENT && Math.abs(zMax.current) < MAX_EXTENT) {
+              shellBuilder.Add(shell, face)
+              faceCount++
+            } else {
+              skippedFaces++
+            }
+          } else {
+            skippedFaces++
+          }
+        } catch (e) {
+          skippedFaces++
+        }
       }
     }
 
@@ -1220,6 +1337,33 @@ export function convertACISBody(oc, bodyEntity) {
 }
 
 /**
+ * Check if a shape has valid (non-extreme) bounding box
+ */
+function hasValidBoundingBox(oc, shape) {
+  try {
+    const bndBox = new oc.Bnd_Box_1()
+    oc.BRepBndLib.Add(shape, bndBox, false)
+
+    if (bndBox.IsVoid()) return false
+
+    const xMin = { current: 0 }, yMin = { current: 0 }, zMin = { current: 0 }
+    const xMax = { current: 0 }, yMax = { current: 0 }, zMax = { current: 0 }
+    bndBox.Get(xMin, yMin, zMin, xMax, yMax, zMax)
+
+    const MAX_EXTENT = 1e10
+    if (Math.abs(xMin.current) > MAX_EXTENT || Math.abs(xMax.current) > MAX_EXTENT ||
+        Math.abs(yMin.current) > MAX_EXTENT || Math.abs(yMax.current) > MAX_EXTENT ||
+        Math.abs(zMin.current) > MAX_EXTENT || Math.abs(zMax.current) > MAX_EXTENT) {
+      return false
+    }
+
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+/**
  * Convert array of ACIS bodies to single OpenCascade shape
  */
 export function convertACISBodiesToShape(oc, bodies) {
@@ -1229,6 +1373,7 @@ export function convertACISBodiesToShape(oc, bodies) {
 
   const shapes = []
   let totalFaces = 0
+  let skippedBodies = 0
 
   for (let i = 0; i < bodies.length; i++) {
     const body = bodies[i]
@@ -1236,21 +1381,30 @@ export function convertACISBodiesToShape(oc, bodies) {
 
     const shape = convertACISBody(oc, body)
     if (shape) {
-      shapes.push(shape)
+      // Validate bounding box before adding
+      if (hasValidBoundingBox(oc, shape)) {
+        shapes.push(shape)
 
-      // Count faces
-      const lumps = body.getLumps ? body.getLumps() : []
-      for (const lump of lumps) {
-        const shells = lump.getShells ? lump.getShells() : []
-        for (const shell of shells) {
-          const faces = shell.getFaces ? shell.getFaces() : []
-          totalFaces += faces.length
+        // Count faces
+        const lumps = body.getLumps ? body.getLumps() : []
+        for (const lump of lumps) {
+          const shells = lump.getShells ? lump.getShells() : []
+          for (const shell of shells) {
+            const faces = shell.getFaces ? shell.getFaces() : []
+            totalFaces += faces.length
+          }
         }
+      } else {
+        skippedBodies++
+        console.warn(`  Skipped body ${i + 1} (invalid bounding box)`)
       }
     }
   }
 
   console.log(`  Total faces to process: ${totalFaces}`)
+  if (skippedBodies > 0) {
+    console.log(`  Skipped ${skippedBodies} bodies with invalid geometry`)
+  }
 
   if (shapes.length === 0) {
     throw new Error('Failed to convert any ACIS bodies to geometry')

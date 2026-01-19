@@ -102,11 +102,17 @@ export class EndOfAcisHistorySection {
   constructor() {
     this.record = null
   }
+  set(record) {
+    // No data to parse
+  }
 }
 
 export class EndOfAcisData {
   constructor() {
     this.record = null
+  }
+  set(record) {
+    // No data to parse
   }
 }
 
