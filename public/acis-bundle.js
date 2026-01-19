@@ -1,18 +1,15 @@
 /**
  * ACIS Parser Bundle
  * Auto-generated from acis-js modules
- * Generated: 2026-01-19T01:04:42.019Z
- *
  * For use with Web Workers via importScripts()
  */
 
 ;(function(global) {
   'use strict'
 
-
-// ============================================================================
-// constants.js
-// ============================================================================
+  // ============================================================================
+  // constants.js
+  // ============================================================================
 
 /**
  * ACIS Constants
@@ -212,1345 +209,15 @@ const ENUMS = {
   CURV_DIR
 }
 
-// ============================================================================
-// math.js
-// ============================================================================
-
-/**
- * ACIS Math Functions
- * Math wrapper functions and Law evaluation
- * Ported from Acis.py lines 201-280
- */
-
-// ============================================================================
-// Trigonometric Functions (uppercase for Law evaluation)
-// ============================================================================
-
-const COS = (x) => Math.cos(x)
-const COSH = (x) => Math.cosh(x)
-const COT = (x) => Math.cos(x) / Math.sin(x)
-const COTH = (x) => Math.cosh(x) / Math.sinh(x)
-const CSC = (x) => 1 / Math.sin(x)
-const CSCH = (x) => 1 / Math.sinh(x)
-const SEC = (x) => 1 / Math.cos(x)
-const SECH = (x) => 1 / Math.cosh(x)
-const SIN = (x) => Math.sin(x)
-const SINH = (x) => Math.sinh(x)
-const TAN = (x) => Math.tan(x)
-const TANH = (x) => Math.tanh(x)
-
-const ARCCOS = (x) => Math.acos(x)
-const ARCCOSH = (x) => Math.acosh(x)
-const ARCOT = (x) => Math.PI / 2 - Math.atan(x)
-const ARCOTH = (x) => 0.5 * Math.log((x + 1) / (x - 1))
-const ARCCSC = (x) => Math.asin(1 / x)
-const ARCCSCH = (x) => Math.log((1 + Math.sqrt(1 + x * x)) / x)
-const ARCSEC = (x) => Math.acos(1 / x)
-const ARCSECH = (x) => Math.log((1 + Math.sqrt(1 - x * x)) / x)
-const ARCSIN = (x) => Math.asin(x)
-const ARCSINH = (x) => Math.asinh(x)
-const ARCTAN = (x) => Math.atan(x)
-const ARCTANH = (x) => Math.atanh(x)
-
-// ============================================================================
-// General Math Functions
-// ============================================================================
-
-const ABS = (x) => Math.abs(x)
-const EXP = (x) => Math.exp(x)
-const LN = (x) => Math.log(x)
-const LOG = (x) => Math.log10(x)
-const SQRT = (x) => Math.sqrt(x)
-const MIN = (...args) => Math.min(...args)
-const MAX = (...args) => Math.max(...args)
-
-// ============================================================================
-// Vector Functions
-// ============================================================================
-
-/**
- * Create a 3D vector
- */
-function VEC(x, y, z) {
-  return { x, y, z }
-}
-
-/**
- * Normalize a vector
- */
-function NORM(v) {
-  const len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
-  if (len < 1e-10) return { x: 0, y: 0, z: 0 }
-  return { x: v.x / len, y: v.y / len, z: v.z / len }
-}
-
-/**
- * Cross product of two vectors
- */
-function CROSS(v1, v2) {
-  return {
-    x: v1.y * v2.z - v1.z * v2.y,
-    y: v1.z * v2.x - v1.x * v2.z,
-    z: v1.x * v2.y - v1.y * v2.x
-  }
-}
-
-/**
- * Dot product of two vectors
- */
-function DOT(v1, v2) {
-  return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z
-}
-
-/**
- * Vector length/magnitude
- */
-function SIZE(v) {
-  return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
-}
-
-/**
- * Get element from vector by index (0=x, 1=y, 2=z)
- */
-function TERM(v, n) {
-  if (n === 0) return v.x
-  if (n === 1) return v.y
-  if (n === 2) return v.z
-  return 0
-}
-
-/**
- * Sign function: returns 1 for positive, -1 for negative, 0 for zero
- */
-function SET(x) {
-  if (x > 0.0) return 1
-  if (x < 0.0) return -1
-  return 0
-}
-
-const SIGN = SET
-
-/**
- * Scale a vector
- */
-function scaleVec(v, s) {
-  return { x: v.x * s, y: v.y * s, z: v.z * s }
-}
-
-/**
- * Add two vectors
- */
-function addVec(v1, v2) {
-  return { x: v1.x + v2.x, y: v1.y + v2.y, z: v1.z + v2.z }
-}
-
-/**
- * Subtract two vectors
- */
-function subVec(v1, v2) {
-  return { x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z }
-}
-
-/**
- * Calculate angle between two vectors (in radians)
- */
-function angleBetween(v1, v2) {
-  const d = DOT(v1, v2)
-  const len1 = SIZE(v1)
-  const len2 = SIZE(v2)
-  if (len1 < 1e-10 || len2 < 1e-10) return 0
-  return Math.acos(Math.max(-1, Math.min(1, d / (len1 * len2))))
-}
-
-/**
- * Convert radians to degrees
- */
-function degrees(rad) {
-  return rad * 180 / Math.PI
-}
-
-/**
- * Convert degrees to radians
- */
-function radians(deg) {
-  return deg * Math.PI / 180
-}
-
-// ============================================================================
-// Comparison Utilities
-// ============================================================================
-
-const EPSILON = 1e-10
-
-/**
- * Check if two floats are approximately equal
- */
-function isEqual1D(a, b, tol = EPSILON) {
-  return Math.abs(a - b) < tol
-}
-
-/**
- * Check if two vectors are approximately equal
- */
-function isEqual(v1, v2, tol = EPSILON) {
-  return isEqual1D(v1.x, v2.x, tol) &&
-         isEqual1D(v1.y, v2.y, tol) &&
-         isEqual1D(v1.z, v2.z, tol)
-}
-
-// ============================================================================
-// Matrix Operations (4x4 transformation matrix)
-// ============================================================================
-
-/**
- * Create identity 4x4 matrix
- */
-function identityMatrix() {
-  return [
-    [1, 0, 0, 0],
-    [0, 1, 0, 0],
-    [0, 0, 1, 0],
-    [0, 0, 0, 1]
-  ]
-}
-
-/**
- * Multiply 4x4 matrix by point (returns transformed point)
- */
-function transformPoint(matrix, point) {
-  const x = matrix[0][0] * point.x + matrix[0][1] * point.y + matrix[0][2] * point.z + matrix[0][3]
-  const y = matrix[1][0] * point.x + matrix[1][1] * point.y + matrix[1][2] * point.z + matrix[1][3]
-  const z = matrix[2][0] * point.x + matrix[2][1] * point.y + matrix[2][2] * point.z + matrix[2][3]
-  const w = matrix[3][0] * point.x + matrix[3][1] * point.y + matrix[3][2] * point.z + matrix[3][3]
-  if (Math.abs(w) > 1e-10 && Math.abs(w - 1) > 1e-10) {
-    return { x: x / w, y: y / w, z: z / w }
-  }
-  return { x, y, z }
-}
-
-/**
- * Multiply 4x4 matrix by direction (ignores translation)
- */
-function transformDirection(matrix, dir) {
-  return {
-    x: matrix[0][0] * dir.x + matrix[0][1] * dir.y + matrix[0][2] * dir.z,
-    y: matrix[1][0] * dir.x + matrix[1][1] * dir.y + matrix[1][2] * dir.z,
-    z: matrix[2][0] * dir.x + matrix[2][1] * dir.y + matrix[2][2] * dir.z
-  }
-}
-
-// ============================================================================
-// Law Class (for evaluating ACIS law expressions)
-// ============================================================================
-
-/**
- * Law class for evaluating mathematical expressions
- * Laws can include trigonometric functions, vector operations, etc.
- */
-class Law {
-  constructor(eq) {
-    // Convert ^ into ** for JavaScript evaluation
-    this.eq = eq.replace(/\^/g, '**')
-  }
-
-  /**
-   * Evaluate the law with given variable X
-   * @param {object|number} X - The variable to substitute
-   * @returns {*} The evaluated result
-   */
-  evaluate(X) {
-    try {
-      // Create evaluation context with all math functions
-      const context = {
-        X,
-        e: Math.E,
-        pi: Math.PI,
-        COS, COSH, COT, COTH, CSC, CSCH, SEC, SECH, SIN, SINH, TAN, TANH,
-        ARCCOS, ARCCOSH, ARCOT, ARCOTH, ARCCSC, ARCCSCH, ARCSEC, ARCSECH,
-        ARCSIN, ARCSINH, ARCTAN, ARCTANH,
-        ABS, EXP, LN, LOG, SQRT, MIN, MAX,
-        VEC, NORM, CROSS, DOT, SIZE, TERM, SET, SIGN
-      }
-
-      // Build function with context
-      const fn = new Function(...Object.keys(context), `return ${this.eq}`)
-      return fn(...Object.values(context))
-    } catch (e) {
-      console.warn(`Can't evaluate law '${this.eq}':`, e.message)
-      return null
-    }
-  }
-}
-
-// ============================================================================
-// Vector to SAT text format
-// ============================================================================
-
-function vec2sat(v) {
-  return `${v.x} ${v.y} ${v.z}`
-}
-
-// ============================================================================
-// 2D Vector class
-// ============================================================================
-
-class V2D {
-  constructor(u, v) {
-    this.u = u
-    this.v = v
-  }
-}
-
-// ============================================================================
-// data-classes.js
-// ============================================================================
-
-/**
- * ACIS Data Classes
- * Core data structures for B-Splines, Helix, Range, Interval, etc.
- * Ported from Acis.py lines 1172-1450
- */
-
-
-// ============================================================================
-// Range Class
-// ============================================================================
-
-/**
- * Represents a range value that can be either infinite ('I') or finite ('F')
- */
-class Range {
-  constructor(type, limit, scale = 1.0) {
-    this.type = type    // 'I' for infinite, 'F' for finite
-    this.limit = limit
-    this.scale = scale
-  }
-
-  toString() {
-    return this.type === 'I' ? 'I' : `F ${this.getLimit()}`
-  }
-
-  getLimit() {
-    return this.type === 'I' ? this.limit : this.limit * this.scale
-  }
-
-  equals(other) {
-    if (other instanceof Range) {
-      return this.getLimit() === other.getLimit()
-    }
-    return this.getLimit() === other
-  }
-
-  subtract(other) {
-    if (other instanceof Range) {
-      return this.getLimit() - other.getLimit()
-    }
-    return this.getLimit() - other
-  }
-
-  add(other) {
-    if (other instanceof Range) {
-      return this.getLimit() + other.getLimit()
-    }
-    return this.getLimit() + other
-  }
-}
-
-// ============================================================================
-// Interval Class
-// ============================================================================
-
-/**
- * Represents an interval with lower and upper Range bounds
- */
-class Interval {
-  constructor(lower, upper) {
-    this.lower = lower
-    this.upper = upper
-  }
-
-  toString() {
-    return `${this.lower} ${this.upper}`
-  }
-
-  getLowerType() { return this.lower.type }
-  getLowerLimit() { return this.lower.getLimit() }
-  getUpperType() { return this.upper.type }
-  getUpperLimit() { return this.upper.getLimit() }
-  getLimit() { return this.getUpperLimit() - this.getLowerLimit() }
-}
-
-// ============================================================================
-// B-Spline Curve Class
-// ============================================================================
-
-/**
- * B-Spline curve data structure
- */
-class BS_Curve {
-  /**
-   * @param {boolean} rational - True for NURBS, False for NUBS
-   * @param {boolean} periodic - True for closed curves
-   * @param {number} degree - Curve degree
-   */
-  constructor(rational, periodic, degree) {
-    this.poles = []           // Array of {x, y, z} points
-    this.uMults = []          // Knot multiplicities
-    this.uKnots = []          // Knot values
-    this.uPeriodic = periodic
-    this.uDegree = degree
-    this.weights = []         // Weights (same length as poles for rational)
-    this.rational = rational
-  }
-}
-
-// ============================================================================
-// B-Spline Surface Class
-// ============================================================================
-
-/**
- * B-Spline surface data structure
- */
-class BS_Surface extends BS_Curve {
-  /**
-   * @param {boolean} rational - True for NURBS
-   * @param {boolean} uPeriodic - Periodic in U direction
-   * @param {boolean} vPeriodic - Periodic in V direction
-   * @param {number} uDegree - Degree in U direction
-   * @param {number} vDegree - Degree in V direction
-   */
-  constructor(rational, uPeriodic, vPeriodic, uDegree, vDegree) {
-    super(rational, uPeriodic, uDegree)
-    this.poles = [[]]         // 2D array of points
-    this.weights = [[]]       // 2D array of weights
-    this.vMults = []
-    this.vKnots = []
-    this.vPeriodic = vPeriodic
-    this.vDegree = vDegree
-  }
-}
-
-// ============================================================================
-// Helix Class
-// ============================================================================
-
-/**
- * Helix curve data structure
- */
-class Helix {
-  constructor() {
-    this.radAngles = new Interval(new Range('I', 1.0), new Range('I', 1.0))
-    this.posCenter = { ...CENTER }
-    this.dirMajor = { ...DIR_X }
-    this.dirMinor = { ...DIR_Y }
-    this.dirPitch = { ...DIR_Z }
-    this.facApex = MIN_0
-    this.vecAxis = { ...DIR_Z }
-  }
-
-  toString() {
-    return `${this.radAngles} ${JSON.stringify(this.posCenter)} ${JSON.stringify(this.dirMajor)} ` +
-           `${JSON.stringify(this.dirMinor)} ${JSON.stringify(this.dirPitch)} ${this.facApex} ` +
-           `${JSON.stringify(this.vecAxis)}`
-  }
-
-  getPitch() {
-    return SIZE(this.dirPitch)
-  }
-
-  getHeight() {
-    const angle = this.radAngles.getLimit()
-    const pitch = this.getPitch()
-    return pitch * angle / 2.0 / Math.PI
-  }
-
-  getRadius() {
-    const majLen = SIZE(this.dirMajor)
-    const minLen = SIZE(this.dirMinor)
-    if (!isEqual1D(majLen, minLen)) {
-      console.warn('Helix: elliptical helix not fully supported')
-    }
-    return majLen
-  }
-
-  getApexAngle() {
-    const radApexAngle = Math.atan2(this.facApex * this.getRadius(), this.getPitch())
-    return degrees(radApexAngle)
-  }
-
-  isLeftHanded() {
-    const cross = CROSS(this.vecAxis, this.dirMajor)
-    const angle = Math.acos(Math.max(-1, Math.min(1,
-      (cross.x * this.dirMinor.x + cross.y * this.dirMinor.y + cross.z * this.dirMinor.z) /
-      (SIZE(cross) * SIZE(this.dirMinor))
-    )))
-    return angle < 0.1
-  }
-
-  /**
-   * Calculate parameter steps for helix interpolation
-   */
-  static calcSteps(a, b, numSegments = 6) {
-    const startSegment = 0.05 // ~1 degree to smooth start
-    const steps = [a, a + startSegment]
-
-    const d = b - a
-    const step = d / Math.ceil(numSegments * d / 2 / Math.PI)
-    let c = a
-    while (c < (b - startSegment)) {
-      c += step
-      steps.push(c)
-    }
-
-    steps.splice(steps.length - 1, 0, b - startSegment)
-    return steps
-  }
-
-  /**
-   * Calculate point on helix at parameter u
-   */
-  static calcPoint(u, minU, a, rMaj, rMin, handed, pitch) {
-    const deltaU = (u - minU) / 2 / Math.PI
-    const fac = 1 + a * deltaU
-    const x = rMaj * fac * Math.cos(u)
-    const y = rMin * fac * Math.sin(u) * handed
-    const z = pitch * deltaU
-    return { x, y, z }
-  }
-
-  /**
-   * Build helix curve points for interpolation
-   * @returns {Array<{x,y,z}>} Array of points
-   */
-  buildPoints() {
-    const minU = this.radAngles.getLowerLimit()
-    const maxU = this.radAngles.getUpperLimit()
-    const rMaj = SIZE(this.dirMajor)
-    const rMin = SIZE(this.dirMinor)
-    const pitch = SIZE(this.dirPitch)
-    const stepsU = Helix.calcSteps(minU, maxU)
-    const handed = this.isLeftHanded() ? 1 : -1
-    const points = []
-
-    for (const u of stepsU) {
-      const c = Helix.calcPoint(u, minU, this.facApex, rMaj, rMin, handed, pitch)
-      points.push(c)
-    }
-
-    return points
-  }
-}
-
-// ============================================================================
-// Loft Data Classes
-// ============================================================================
-
-class LoftData {
-  constructor() {
-    this.surface = null
-    this.bs2cur = null
-    this.e1 = false
-    this.type = 213
-    this.n = 1
-    this.m = 1
-    this.v = []
-    this.e2 = false
-    this.dir = null
-  }
-}
-
-class Skin {
-  constructor() {
-    this.a1 = [-1, -1, -1, -1]
-    this.f1 = MIN_0
-    this.loft = []
-    this.a2 = [0.0, 0.0, 0.0]
-    this.surf = null
-    this.n = 0
-    this.law = 'null_law'
-    this.pcur = null
-    this.cur = null
-    this.cur2 = null
-    this.vec = null
-    this.f2 = 0
-  }
-}
-
-// ============================================================================
-// Boundary Geometry Classes
-// ============================================================================
-
-/**
- * Base class for boundary geometry
- */
-class BDY_GEOM {
-  constructor(svId) {
-    this.svId = svId
-    this.shape = null
-    this._readyToBuild = true
-  }
-
-  build() {
-    if (this._readyToBuild) {
-      this._readyToBuild = false
-      this.buildCurve()
-    }
-    return this.shape
-  }
-
-  buildCurve() {
-    // Override in subclasses
-  }
-}
-
-class BDY_GEOM_CIRCLE extends BDY_GEOM {
-  constructor() {
-    super('circle')
-    this.curve = null
-    this.twist = [null, null]
-    this.parameters = [MIN_0, MAX_2PI]
-    this.sense = 'forward'
-    this.type = 'non_cross'
-    this.magic = { ...CENTER }
-    this.uSmoothing = 'non_smooth'
-    this.vSmoothing = 'non_smooth'
-    this.fullness = 0
-  }
-
-  buildCurve() {
-    if (this.curve !== null) {
-      const u = this.parameters[0]
-      const v = this.parameters[1]
-      this.shape = this.curve.build(u, v)
-    }
-  }
-}
-
-class BDY_GEOM_DEG extends BDY_GEOM {
-  constructor() {
-    super('deg')
-    this.location = { ...CENTER }
-    this.normal1 = { ...DIR_X }
-    this.normal2 = { ...DIR_Y }
-    this.type = 'non_cross'
-    this.magic = { ...CENTER }
-    this.uSmoothing = 'non_smooth'
-    this.vSmoothing = 'non_smooth'
-    this.fullness = 0
-  }
-
-  buildCurve() {
-    // Creates a point shape
-    this.shape = { type: 'point', location: this.location }
-  }
-}
-
-class BDY_GEOM_PCURVE extends BDY_GEOM {
-  constructor() {
-    super('pcurve')
-    this.surface = null
-    this.pcurve = null
-    this.sense = 'forward'
-    this.fittolerance = 0.0
-    this.type = 'non_cross'
-    this.magic = { ...CENTER }
-    this.uSmoothing = 'non_smooth'
-    this.vSmoothing = 'non_smooth'
-    this.fullness = 0
-  }
-
-  buildCurve() {
-    // Build curve from pcurve on surface
-    // This requires the OpenCascade geometry builder
-  }
-}
-
-class BDY_GEOM_PLANE extends BDY_GEOM {
-  constructor() {
-    super('plane')
-    this.normal = { ...DIR_Z }
-    this.parameters = [MIN_0, 1.0]
-    this.curve = null
-    this.type = 'non_cross'
-    this.magic = { ...CENTER }
-    this.uSmoothing = 'non_smooth'
-    this.vSmoothing = 'non_smooth'
-    this.fullness = 0
-  }
-
-  buildCurve() {
-    if (this.curve !== null) {
-      const u = this.parameters[0]
-      const v = this.parameters[1]
-      this.shape = this.curve.build(u, v)
-    }
-  }
-}
-
-// ============================================================================
-// Index Mappings (for DC attributes)
-// ============================================================================
-
-class IndexMappings {
-  constructor() {
-    this.attributes = []
-  }
-
-  append(attr) {
-    this.attributes.push(attr)
-  }
-
-  _getTypedOwners(ownerType) {
-    const result = new Map()
-    for (const a of this.attributes) {
-      const owner = a.getOwner()
-      if (owner && owner.getType() === ownerType) {
-        if (!result.has(owner.index)) {
-          result.set(owner.index, owner)
-        }
-      }
-    }
-    return Array.from(result.values())
-  }
-
-  getEdges() {
-    return this._getTypedOwners('edge')
-  }
-
-  getFaces() {
-    return this._getTypedOwners('face')
-  }
-}
-
-// ============================================================================
-// VBL Classes Map
-// ============================================================================
-
-const VBL_CLASSES = {
-  'circle': BDY_GEOM_CIRCLE,
-  'deg': BDY_GEOM_DEG,
-  'pcurve': BDY_GEOM_PCURVE,
-  'plane': BDY_GEOM_PLANE
-}
-
-// ============================================================================
-// utils.js
-// ============================================================================
-
-/**
- * ACIS Utility Functions
- * Helper functions for reading values from chunks
- * Ported from Acis.py lines 132-700
- */
-
-
-// ============================================================================
-// Reader State (module-level)
-// ============================================================================
-
-let _reader = null
-let _scale = 1.0
-let _version = 7.0
-
-function getReader() {
-  return _reader
-}
-
-function setReader(reader) {
-  _reader = reader
-}
-
-function getScale() {
-  return _reader ? _reader.scale : _scale
-}
-
-function setScale(s) {
-  _scale = s
-}
-
-function getVersion() {
-  return _reader ? _reader.version : _version
-}
-
-function setVersion(v) {
-  _version = v
-}
-
-function isASM() {
-  if (_reader && _reader.header) {
-    return _reader.header.asm !== undefined
-  }
-  return false
-}
-
-function getAsmMajor() {
-  if (_reader && _reader.header && _reader.header.asm) {
-    return _reader.header.asm[0]
-  }
-  return 0
-}
-
-// ============================================================================
-// Basic Value Getters
-// ============================================================================
-
-/**
- * Get raw value from chunk at index
- */
-function getValue(chunks, index) {
-  const chunk = chunks[index]
-  return [chunk.val !== undefined ? chunk.val : chunk.value, index + 1]
-}
-
-/**
- * Get entity reference from chunk
- * Matches Python Acis.py getRefNode() function behavior
- */
-function getRefNode(record, index, expectedName = null) {
-  if (index >= record.chunks.length) {
-    return [null, index]
-  }
-
-  const chunk = record.chunks[index]
-
-  if (chunk.tag === TAG_ENTITY_REF || chunk.type === 'entity_ref') {
-    const ref = chunk.record || chunk
-
-    // If null ref (-1), return null
-    if (chunk.val === -1 || ref === null || !ref.name) {
-      return [null, index + 1]
-    }
-
-    // If expectedName provided, check if ref matches
-    if (expectedName !== null && !ref.name.endsWith(expectedName)) {
-      // Python raises exception here, but we'll be lenient and just warn
-      // console.warn(`Expected ${expectedName} but found ${ref.name} at index ${index}`)
-    }
-
-    return [ref, index + 1]
-  }
-
-  // Not an entity ref - return null (Python would raise exception)
-  return [null, index]
-}
-
-/**
- * Get boolean value from chunk
- */
-function getBoolean(chunks, index) {
-  const chunk = chunks[index]
-  if (chunk.tag === TAG_UTF8_U8 || chunk.type === 'string') {
-    const val = chunk.val || chunk.value
-    return [val === 'T', index + 1]
-  }
-  if (chunk.tag === TAG_TRUE || chunk.value === true) {
-    return [true, index + 1]
-  }
-  if (chunk.tag === TAG_FALSE || chunk.value === false) {
-    return [false, index + 1]
-  }
-  return [!!chunk.val, index + 1]
-}
-
-/**
- * Get integer value from chunk
- */
-function getInteger(chunks, index) {
-  const [val, i] = getValue(chunks, index)
-  return [parseInt(val, 10), i]
-}
-
-/**
- * Get multiple integer values
- */
-function getIntegers(chunks, index, count) {
-  let i = index
-  const arr = []
-  for (let n = 0; n < count; n++) {
-    const [val, ni] = getInteger(chunks, i)
-    arr.push(val)
-    i = ni
-  }
-  return [arr, i]
-}
-
-/**
- * Get long integer value
- */
-function getLong(chunks, index) {
-  const [val, i] = getValue(chunks, index)
-  return [parseInt(val, 10), i]
-}
-
-/**
- * Get float value from chunk
- */
-function getFloat(chunks, index) {
-  const [val, i] = getValue(chunks, index)
-  return [parseFloat(val), i]
-}
-
-/**
- * Get multiple float values
- */
-function getFloats(chunks, index, count) {
-  let i = index
-  const arr = []
-  let n = 0
-  while (n < count) {
-    const chunk = chunks[i]
-    i++
-    if (chunk.tag === TAG_POSITION || chunk.tag === TAG_VECTOR_3D ||
-        chunk.type === 'position' || chunk.type === 'vector3d') {
-      const v = chunk.val || chunk.value
-      if (v.x !== undefined) {
-        arr.push(v.x, v.y, v.z)
-        n += 3
-      } else if (Array.isArray(v)) {
-        arr.push(...v)
-        n += v.length
-      }
-    } else {
-      arr.push(parseFloat(chunk.val !== undefined ? chunk.val : chunk.value))
-      n++
-    }
-  }
-  return [arr, i]
-}
-
-/**
- * Get scaled float values
- */
-function getFloatsScaled(chunks, index, count) {
-  const s = getScale()
-  let i = index
-  const arr = []
-  for (let n = 0; n < count; n++) {
-    const [f, ni] = getFloat(chunks, i)
-    arr.push(f * s)
-    i = ni
-  }
-  return [arr, i]
-}
-
-/**
- * Get float array (count followed by floats)
- */
-function getFloatArray(chunks, index) {
-  const [n, i1] = getInteger(chunks, index)
-  const [arr, i2] = getFloats(chunks, i1, n)
-  return [arr, i2]
-}
-
-/**
- * Get length value (scaled)
- */
-function getLength(chunks, index) {
-  const [l, i] = getFloat(chunks, index)
-  return [l * getScale(), i]
-}
-
-/**
- * Get text value
- */
-function getText(chunks, index) {
-  const chunk = chunks[index]
-  if (chunk.tag === TAG_DOUBLE) {
-    return getValue(chunks, index + 1)
-  }
-  return getValue(chunks, index)
-}
-
-// ============================================================================
-// Enum Getters
-// ============================================================================
-
-/**
- * Get enum value by tag
- */
-function getEnumByTag(chunks, index, values) {
-  const chunk = chunks[index]
-  let val = chunk.val !== undefined ? chunk.val : chunk.value
-
-  if (chunk.tag === TAG_UTF8_U8 || chunk.type === 'string') {
-    // Text value - look up in values
-    for (const key of Object.keys(values)) {
-      if (values[key] === val) {
-        return [val, index + 1]
-      }
-    }
-    // Return raw value if not found
-    return [val, index + 1]
-  }
-
-  if (chunk.tag === TAG_TRUE || chunk.value === true) {
-    return [values[TAG_TRUE] || values['T'] || values[1], index + 1]
-  }
-  if (chunk.tag === TAG_FALSE || chunk.value === false) {
-    return [values[TAG_FALSE] || values['F'] || values[0], index + 1]
-  }
-
-  // Numeric enum
-  if (values[val] !== undefined) {
-    return [values[val], index + 1]
-  }
-
-  return [val, index + 1]
-}
-
-/**
- * Get enum value by value lookup
- */
-function getEnumByValue(chunks, index, values) {
-  const chunk = chunks[index]
-  const val = chunk.val !== undefined ? chunk.val : chunk.value
-
-  if (values[val] !== undefined) {
-    return [values[val], index + 1]
-  }
-  return [val, index + 1]
-}
-
-/**
- * Get sides enum (single/double with optional side)
- */
-function getSides(chunks, index) {
-  const [sides, i] = getEnumByTag(chunks, index, SIDES)
-  if (sides === 'double') {
-    const [side, i2] = getEnumByTag(chunks, i, SIDE)
-    return [sides, side, i2]
-  }
-  return [sides, null, i]
-}
-
-/**
- * Get singularity enum
- */
-function getSingularity(chunks, index) {
-  if (getVersion() > 4.0) {
-    return getEnumByValue(chunks, index, SINGULARITY)
-  }
-  return ['full', index]
-}
-
-// ============================================================================
-// Vector/Point Getters
-// ============================================================================
-
-/**
- * Get point (3 floats or position chunk)
- */
-function getPoint(chunks, index) {
-  const chunk = chunks[index]
-  if (chunk.tag === TAG_POSITION || chunk.tag === TAG_VECTOR_3D ||
-      chunk.type === 'position' || chunk.type === 'vector3d') {
-    const v = chunk.val || chunk.value
-    if (v.x !== undefined) {
-      return [{ x: v.x, y: v.y, z: v.z }, index + 1]
-    }
-    return [{ x: v[0], y: v[1], z: v[2] }, index + 1]
-  }
-  const [x, i1] = getFloat(chunks, index)
-  const [y, i2] = getFloat(chunks, i1)
-  const [z, i3] = getFloat(chunks, i2)
-  return [{ x, y, z }, i3]
-}
-
-/**
- * Get vector (point normalized)
- */
-function getVector(chunks, index) {
-  return getPoint(chunks, index)
-}
-
-/**
- * Get location (scaled point)
- */
-function getLocation(chunks, index) {
-  const [p, i] = getPoint(chunks, index)
-  const s = getScale()
-  return [{ x: p.x * s, y: p.y * s, z: p.z * s }, i]
-}
-
-// ============================================================================
-// Range/Interval Getters
-// ============================================================================
-
-/**
- * Get range value
- */
-function getRange(chunks, index, defaultVal, scale) {
-  const [type, i] = getEnumByTag(chunks, index, RANGE)
-  let val = defaultVal
-
-  if (type === 'F' || type === TAG_FALSE) {
-    const [v, i2] = getFloat(chunks, i)
-    return [new Range(type, v, scale), i2]
-  } else if (type === 'T') {
-    const [arr, i2] = getFloats(chunks, i, 7)
-    val = arr[0]
-    return [new Range(type, val, scale), i2]
-  }
-
-  return [new Range(type, val, scale), i]
-}
-
-/**
- * Get interval (lower and upper range)
- */
-function getInterval(chunks, index, defMin, defMax, scale) {
-  const [lower, i1] = getRange(chunks, index, defMin, scale)
-  const [upper, i2] = getRange(chunks, i1, defMax, scale)
-  return [new Interval(lower, upper), i2]
-}
-
-// ============================================================================
-// Dimension Getters (for curves/surfaces)
-// ============================================================================
-
-/**
- * Get curve dimension (nullbs|nurbs|nubs)
- */
-function getDimensionCurve(chunks, index) {
-  const [val, i] = getValue(chunks, index)
-  if (val === 'nullbs') {
-    return [val, 0, i]
-  }
-  if (val === 'nurbs' || val === 'nubs') {
-    const [degrees, i2] = getInteger(chunks, i)
-    return [val, degrees, i2]
-  }
-  throw new Error(`Unknown DIMENSION '${val}'`)
-}
-
-/**
- * Get surface dimension (nullbs|nurbs|nubs|summary)
- */
-function getDimensionSurface(chunks, index) {
-  const [val, i] = getValue(chunks, index)
-  if (val === 'nullbs') {
-    return [val, null, null, i]
-  }
-  if (val === 'nurbs' || val === 'nubs' || val === 'summary') {
-    const [degreesU, i2] = getInteger(chunks, i)
-    const [degreesV, i3] = getInteger(chunks, i2)
-    return [val, degreesU, degreesV, i3]
-  }
-  throw new Error(`Unknown DIMENSION '${val}'`)
-}
-
-// ============================================================================
-// Closure Getters
-// ============================================================================
-
-/**
- * Get curve closure
- */
-function getClosureCurve(chunks, index) {
-  const [closure, i] = getEnumByValue(chunks, index, CLOSURE)
-  if (closure === 'open' || closure === 'closed' || closure === 'periodic') {
-    const [knots, i2] = getInteger(chunks, i)
-    return [closure, knots, i2]
-  }
-  throw new Error(`Unknown closure '${closure}'`)
-}
-
-/**
- * Get surface closure
- */
-function getClosureSurface(chunks, index) {
-  let [closureU, i] = getEnumByValue(chunks, index, CLOSURE)
-
-  // Handle optional prefix
-  if (closureU === 'both' || closureU === 'u' || closureU === 'v') {
-    [closureU, i] = getEnumByValue(chunks, i, CLOSURE)
-  }
-
-  if (closureU === 'open' || closureU === 'closed' || closureU === 'periodic') {
-    const [closureV, i2] = getEnumByValue(chunks, i, CLOSURE)
-    const [singularityU, i3] = getEnumByValue(chunks, i2, SINGULARITY)
-    const [singularityV, i4] = getEnumByValue(chunks, i3, SINGULARITY)
-    const [countU, i5] = getInteger(chunks, i4)
-    const [countV, i6] = getInteger(chunks, i5)
-    return [closureU, closureV, singularityU, singularityV, countU, countV, i6]
-  }
-
-  throw new Error(`Unknown closure '${closureU}'`)
-}
-
-// ============================================================================
-// Unknown/Version-specific Getters
-// ============================================================================
-
-/**
- * Get unknown FT values (version-specific)
- */
-function getUnknownFT(chunks, index) {
-  let i = index
-  let val = 'F'
-  let arr = []
-  let val2 = 'F'
-
-  if (getVersion() > 7.0 && !isASM()) {
-    [val, i] = getValue(chunks, i)
-    if (val === 'T') {
-      [arr, i] = getFloats(chunks, i, 6)
-      [val2, i] = getValue(chunks, i)
-    }
-  }
-
-  return [[val, arr, val2], i]
-}
-
-// ============================================================================
-// Knot/Mult Readers
-// ============================================================================
-
-/**
- * Read knots and multiplicities
- */
-function readKnotsMults(count, chunks, index) {
-  const knots = []
-  const mults = []
-  let i = index
-
-  for (let j = 0; j < count; j++) {
-    const [knot, i2] = getFloat(chunks, i)
-    const [mult, i3] = getInteger(chunks, i2)
-    knots.push(knot)
-    mults.push(mult)
-    i = i3
-  }
-
-  return [knots, mults, i]
-}
-
-/**
- * Adjust multiplicities for clamped B-spline
- */
-function adjustMultsKnots(knots, mults, degree) {
-  const newMults = [...mults]
-  newMults[0] = degree + 1
-  newMults[newMults.length - 1] = degree + 1
-  return [knots, newMults]
-}
-
-// ============================================================================
-// Points List Readers
-// ============================================================================
-
-/**
- * Read 2D points list for curve
- */
-function readPoints2DList(spline, count, chunks, index) {
-  let i
-  [spline.uKnots, spline.uMults, i] = readKnotsMults(count, chunks, index)
-
-  const us = spline.uMults.reduce((a, b) => a + b, 0) - (spline.uDegree - 1)
-  spline.poles = new Array(us).fill(null)
-  spline.weights = spline.rational ? new Array(us).fill(1) : null
-
-  for (let k = 0; k < us; k++) {
-    const [u, i2] = getLength(chunks, i)
-    const [v, i3] = getLength(chunks, i2)
-    spline.poles[k] = new V2D(u, v)
-    i = i3
-    if (spline.rational) {
-      [spline.weights[k], i] = getFloat(chunks, i)
-    }
-  }
-
-  [spline.uKnots, spline.uMults] = adjustMultsKnots(spline.uKnots, spline.uMults, spline.uDegree)
-
-  return [spline, i]
-}
-
-/**
- * Read 3D points list for curve
- */
-function readPoints3DList(spline, count, chunks, index) {
-  let i
-  [spline.uKnots, spline.uMults, i] = readKnotsMults(count, chunks, index)
-
-  const us = spline.uMults.reduce((a, b) => a + b, 0) - (spline.uDegree - 1)
-  spline.poles = new Array(us).fill(null)
-  spline.weights = spline.rational ? new Array(us).fill(1) : null
-
-  for (let u = 0; u < us; u++) {
-    [spline.poles[u], i] = getLocation(chunks, i)
-    if (spline.rational) {
-      [spline.weights[u], i] = getFloat(chunks, i)
-    }
-  }
-
-  [spline.uKnots, spline.uMults] = adjustMultsKnots(spline.uKnots, spline.uMults, spline.uDegree)
-
-  return [spline, i]
-}
-
-/**
- * Read 3D points for surface
- */
-function readPoints3DSurface(spline, countU, countV, chunks, index) {
-  let i
-  [spline.uKnots, spline.uMults, i] = readKnotsMults(countU, chunks, index);
-  [spline.vKnots, spline.vMults, i] = readKnotsMults(countV, chunks, i)
-
-  const us = spline.uMults.reduce((a, b) => a + b, 0) - (spline.uDegree - 1)
-  const vs = spline.vMults.reduce((a, b) => a + b, 0) - (spline.vDegree - 1)
-
-  spline.poles = Array.from({ length: us }, () => new Array(vs).fill(null))
-  spline.weights = spline.rational
-    ? Array.from({ length: us }, () => new Array(vs).fill(1))
-    : null
-
-  for (let v = 0; v < vs; v++) {
-    for (let u = 0; u < us; u++) {
-      [spline.poles[u][v], i] = getLocation(chunks, i)
-      if (spline.rational) {
-        [spline.weights[u][v], i] = getFloat(chunks, i)
-      }
-    }
-  }
-
-  [spline.uKnots, spline.uMults] = adjustMultsKnots(spline.uKnots, spline.uMults, spline.uDegree);
-  [spline.vKnots, spline.vMults] = adjustMultsKnots(spline.vKnots, spline.vMults, spline.vDegree)
-
-  return [spline, i]
-}
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Check if value is a string
- */
-function isString(val) {
-  return typeof val === 'string'
-}
-
-/**
- * Reshape flat array into 2D array
- */
-function reshape(arr, cols) {
-  const result = []
-  for (let i = 0; i < arr.length; i += cols) {
-    result.push(arr.slice(i, i + cols))
-  }
-  return result
-}
-
-// ============================================================================
-// chunks.js
-// ============================================================================
+  // ============================================================================
+  // chunks.js
+  // ============================================================================
 
 /**
  * ACIS Chunk Classes
  * Binary chunk readers for ACIS format
  * Ported from Acis.py lines 4700-4900
  */
-
 
 // ============================================================================
 // Binary Reading Helpers
@@ -2017,17 +684,1198 @@ function createChunk(tag, data, offset, scale = 1.0, is64bit = false) {
   throw new Error(`Unknown ACIS tag: 0x${tag.toString(16)}`)
 }
 
+  // ============================================================================
+  // math.js
+  // ============================================================================
+
+/**
+ * ACIS Math Functions
+ * Math wrapper functions and Law evaluation
+ * Ported from Acis.py lines 201-280
+ */
+
 // ============================================================================
-// entity.js
+// Trigonometric Functions (uppercase for Law evaluation)
 // ============================================================================
+
+const COS = (x) => Math.cos(x)
+const COSH = (x) => Math.cosh(x)
+const COT = (x) => Math.cos(x) / Math.sin(x)
+const COTH = (x) => Math.cosh(x) / Math.sinh(x)
+const CSC = (x) => 1 / Math.sin(x)
+const CSCH = (x) => 1 / Math.sinh(x)
+const SEC = (x) => 1 / Math.cos(x)
+const SECH = (x) => 1 / Math.cosh(x)
+const SIN = (x) => Math.sin(x)
+const SINH = (x) => Math.sinh(x)
+const TAN = (x) => Math.tan(x)
+const TANH = (x) => Math.tanh(x)
+
+const ARCCOS = (x) => Math.acos(x)
+const ARCCOSH = (x) => Math.acosh(x)
+const ARCOT = (x) => Math.PI / 2 - Math.atan(x)
+const ARCOTH = (x) => 0.5 * Math.log((x + 1) / (x - 1))
+const ARCCSC = (x) => Math.asin(1 / x)
+const ARCCSCH = (x) => Math.log((1 + Math.sqrt(1 + x * x)) / x)
+const ARCSEC = (x) => Math.acos(1 / x)
+const ARCSECH = (x) => Math.log((1 + Math.sqrt(1 - x * x)) / x)
+const ARCSIN = (x) => Math.asin(x)
+const ARCSINH = (x) => Math.asinh(x)
+const ARCTAN = (x) => Math.atan(x)
+const ARCTANH = (x) => Math.atanh(x)
+
+// ============================================================================
+// General Math Functions
+// ============================================================================
+
+const ABS = (x) => Math.abs(x)
+const EXP = (x) => Math.exp(x)
+const LN = (x) => Math.log(x)
+const LOG = (x) => Math.log10(x)
+const SQRT = (x) => Math.sqrt(x)
+const MIN = (...args) => Math.min(...args)
+const MAX = (...args) => Math.max(...args)
+
+// ============================================================================
+// Vector Functions
+// ============================================================================
+
+/**
+ * Create a 3D vector
+ */
+function VEC(x, y, z) {
+  return { x, y, z }
+}
+
+/**
+ * Normalize a vector
+ */
+function NORM(v) {
+  const len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+  if (len < 1e-10) return { x: 0, y: 0, z: 0 }
+  return { x: v.x / len, y: v.y / len, z: v.z / len }
+}
+
+/**
+ * Cross product of two vectors
+ */
+function CROSS(v1, v2) {
+  return {
+    x: v1.y * v2.z - v1.z * v2.y,
+    y: v1.z * v2.x - v1.x * v2.z,
+    z: v1.x * v2.y - v1.y * v2.x
+  }
+}
+
+/**
+ * Dot product of two vectors
+ */
+function DOT(v1, v2) {
+  return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z
+}
+
+/**
+ * Vector length/magnitude
+ */
+function SIZE(v) {
+  return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+}
+
+/**
+ * Get element from vector by index (0=x, 1=y, 2=z)
+ */
+function TERM(v, n) {
+  if (n === 0) return v.x
+  if (n === 1) return v.y
+  if (n === 2) return v.z
+  return 0
+}
+
+/**
+ * Sign function: returns 1 for positive, -1 for negative, 0 for zero
+ */
+function SET(x) {
+  if (x > 0.0) return 1
+  if (x < 0.0) return -1
+  return 0
+}
+
+const SIGN = SET
+
+/**
+ * Scale a vector
+ */
+function scaleVec(v, s) {
+  return { x: v.x * s, y: v.y * s, z: v.z * s }
+}
+
+/**
+ * Add two vectors
+ */
+function addVec(v1, v2) {
+  return { x: v1.x + v2.x, y: v1.y + v2.y, z: v1.z + v2.z }
+}
+
+/**
+ * Subtract two vectors
+ */
+function subVec(v1, v2) {
+  return { x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z }
+}
+
+/**
+ * Calculate angle between two vectors (in radians)
+ */
+function angleBetween(v1, v2) {
+  const d = DOT(v1, v2)
+  const len1 = SIZE(v1)
+  const len2 = SIZE(v2)
+  if (len1 < 1e-10 || len2 < 1e-10) return 0
+  return Math.acos(Math.max(-1, Math.min(1, d / (len1 * len2))))
+}
+
+/**
+ * Convert radians to degrees
+ */
+function degrees(rad) {
+  return rad * 180 / Math.PI
+}
+
+/**
+ * Convert degrees to radians
+ */
+function radians(deg) {
+  return deg * Math.PI / 180
+}
+
+// ============================================================================
+// Comparison Utilities
+// ============================================================================
+
+const EPSILON = 1e-10
+
+/**
+ * Check if two floats are approximately equal
+ */
+function isEqual1D(a, b, tol = EPSILON) {
+  return Math.abs(a - b) < tol
+}
+
+/**
+ * Check if two vectors are approximately equal
+ */
+function isEqual(v1, v2, tol = EPSILON) {
+  return isEqual1D(v1.x, v2.x, tol) &&
+         isEqual1D(v1.y, v2.y, tol) &&
+         isEqual1D(v1.z, v2.z, tol)
+}
+
+// ============================================================================
+// Matrix Operations (4x4 transformation matrix)
+// ============================================================================
+
+/**
+ * Create identity 4x4 matrix
+ */
+function identityMatrix() {
+  return [
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]
+  ]
+}
+
+/**
+ * Multiply 4x4 matrix by point (returns transformed point)
+ */
+function transformPoint(matrix, point) {
+  const x = matrix[0][0] * point.x + matrix[0][1] * point.y + matrix[0][2] * point.z + matrix[0][3]
+  const y = matrix[1][0] * point.x + matrix[1][1] * point.y + matrix[1][2] * point.z + matrix[1][3]
+  const z = matrix[2][0] * point.x + matrix[2][1] * point.y + matrix[2][2] * point.z + matrix[2][3]
+  const w = matrix[3][0] * point.x + matrix[3][1] * point.y + matrix[3][2] * point.z + matrix[3][3]
+  if (Math.abs(w) > 1e-10 && Math.abs(w - 1) > 1e-10) {
+    return { x: x / w, y: y / w, z: z / w }
+  }
+  return { x, y, z }
+}
+
+/**
+ * Multiply 4x4 matrix by direction (ignores translation)
+ */
+function transformDirection(matrix, dir) {
+  return {
+    x: matrix[0][0] * dir.x + matrix[0][1] * dir.y + matrix[0][2] * dir.z,
+    y: matrix[1][0] * dir.x + matrix[1][1] * dir.y + matrix[1][2] * dir.z,
+    z: matrix[2][0] * dir.x + matrix[2][1] * dir.y + matrix[2][2] * dir.z
+  }
+}
+
+// ============================================================================
+// Law Class (for evaluating ACIS law expressions)
+// ============================================================================
+
+/**
+ * Law class for evaluating mathematical expressions
+ * Laws can include trigonometric functions, vector operations, etc.
+ */
+class Law {
+  constructor(eq) {
+    // Convert ^ into ** for JavaScript evaluation
+    this.eq = eq.replace(/\^/g, '**')
+  }
+
+  /**
+   * Evaluate the law with given variable X
+   * @param {object|number} X - The variable to substitute
+   * @returns {*} The evaluated result
+   */
+  evaluate(X) {
+    try {
+      // Create evaluation context with all math functions
+      const context = {
+        X,
+        e: Math.E,
+        pi: Math.PI,
+        COS, COSH, COT, COTH, CSC, CSCH, SEC, SECH, SIN, SINH, TAN, TANH,
+        ARCCOS, ARCCOSH, ARCOT, ARCOTH, ARCCSC, ARCCSCH, ARCSEC, ARCSECH,
+        ARCSIN, ARCSINH, ARCTAN, ARCTANH,
+        ABS, EXP, LN, LOG, SQRT, MIN, MAX,
+        VEC, NORM, CROSS, DOT, SIZE, TERM, SET, SIGN
+      }
+
+      // Build function with context
+      const fn = new Function(...Object.keys(context), `return ${this.eq}`)
+      return fn(...Object.values(context))
+    } catch (e) {
+      console.warn(`Can't evaluate law '${this.eq}':`, e.message)
+      return null
+    }
+  }
+}
+
+// ============================================================================
+// Vector to SAT text format
+// ============================================================================
+
+function vec2sat(v) {
+  return `${v.x} ${v.y} ${v.z}`
+}
+
+// ============================================================================
+// 2D Vector class
+// ============================================================================
+
+class V2D {
+  constructor(u, v) {
+    this.u = u
+    this.v = v
+  }
+}
+
+  // ============================================================================
+  // spline.js
+  // ============================================================================
+
+/**
+ * ACIS Spline Functions
+ * B-Spline reading and parsing functions
+ * Ported from Acis.py lines 584-1000
+ */
+
+// ============================================================================
+// Curve and Surface Class Mappings (set via setters to avoid circular deps)
+// ============================================================================
+
+let CURVES = null
+let SURFACES = null
+
+/**
+ * Set the curve classes mapping (called from index.js after all modules loaded)
+ */
+function setCurveClasses(mapping) {
+  CURVES = mapping
+}
+
+/**
+ * Set the surface classes mapping (called from index.js after all modules loaded)
+ */
+function setSurfaceClasses(mapping) {
+  SURFACES = mapping
+}
+
+// ============================================================================
+// B-Spline Curve Readers
+// ============================================================================
+
+/**
+ * Read 2D B-spline curve (parameter space curve)
+ */
+function readBS2Curve(chunks, index) {
+  const [dimension, degree, i1] = getDimensionCurve(chunks, index)
+
+  if (dimension === 'nullbs') {
+    return [null, i1]
+  }
+
+  const rational = dimension === 'nurbs'
+  const spline = new BS_Curve(rational, false, degree)
+
+  const [closure, count, i2] = getClosureCurve(chunks, i1)
+  spline.uPeriodic = closure === 'periodic'
+
+  const [resultSpline, i3] = readPoints2DList(spline, count, chunks, i2)
+
+  return [resultSpline, i3]
+}
+
+/**
+ * Read 3D B-spline curve
+ */
+function readBS3Curve(chunks, index) {
+  const [dimension, degree, i1] = getDimensionCurve(chunks, index)
+
+  if (dimension === 'nullbs') {
+    return [null, i1]
+  }
+
+  const rational = dimension === 'nurbs'
+  const spline = new BS_Curve(rational, false, degree)
+
+  const [closure, count, i2] = getClosureCurve(chunks, i1)
+  spline.uPeriodic = closure === 'periodic'
+
+  const [resultSpline, i3] = readPoints3DList(spline, count, chunks, i2)
+
+  return [resultSpline, i3]
+}
+
+/**
+ * Read B-spline surface
+ */
+function readBS3Surface(chunks, index) {
+  const [dimension, degreeU, degreeV, i1] = getDimensionSurface(chunks, index)
+
+  if (dimension === 'nullbs') {
+    return [null, i1]
+  }
+
+  const rational = dimension === 'nurbs'
+  const spline = new BS_Surface(rational, false, false, degreeU, degreeV)
+
+  const [closureU, closureV, singU, singV, countU, countV, i2] = getClosureSurface(chunks, i1)
+  spline.uPeriodic = closureU === 'periodic'
+  spline.vPeriodic = closureV === 'periodic'
+
+  const [resultSpline, i3] = readPoints3DSurface(spline, countU, countV, chunks, i2)
+
+  return [resultSpline, i3]
+}
+
+// ============================================================================
+// Spline Surface Reader (with tolerance)
+// ============================================================================
+
+/**
+ * Read spline surface with tolerance
+ */
+function readSplineSurface(chunks, index, toleranceAtEnd) {
+  let tolerance = 0.0
+  let i = index
+
+  if (!toleranceAtEnd) {
+    ;[tolerance, i] = getLength(chunks, i)
+  }
+
+  const [spline, i2] = readBS3Surface(chunks, i)
+
+  if (toleranceAtEnd && spline !== null) {
+    ;[tolerance, i] = getLength(chunks, i2)
+    return [spline, tolerance, i]
+  }
+
+  return [spline, tolerance, i2]
+}
+
+// ============================================================================
+// Curve Factory (Python readCurve lines 684-693)
+// ============================================================================
+
+/**
+ * Read embedded curve definition
+ * Creates a curve instance and parses its subtype data
+ */
+function readCurve(chunks, index) {
+  const [val, i] = getValue(chunks, index)
+
+  // Null curve check
+  if (val === 'null_curve' || val === 'nullbs' || val === 'null_pcurve') {
+    return [null, i]
+  }
+
+  // If we don't have the curve mappings yet (before initialization), return stub
+  if (!CURVES) {
+    console.warn(`readCurve: CURVES mapping not initialized, returning stub for '${val}'`)
+    return [{ type: val, index: i }, i]
+  }
+
+  // Get the curve class
+  const CurveClass = CURVES[val]
+  if (CurveClass === undefined) {
+    console.warn(`readCurve: Unknown curve type '${val}'`)
+    return [{ type: val, index: i }, i]
+  }
+
+  // Null mapping means null curve
+  if (CurveClass === null) {
+    return [null, i]
+  }
+
+  try {
+    // Create instance and parse subtype
+    const curve = new CurveClass()
+    curve.subtype = val
+    const newIndex = curve.setSubtype(chunks, i)
+    return [curve, newIndex]
+  } catch (e) {
+    console.error(`readCurve: Error parsing curve type '${val}':`, e)
+    throw new Error(`Unknown curve-type '${val}'!`)
+  }
+}
+
+// ============================================================================
+// Surface Factory (Python readSurface lines 695-715)
+// ============================================================================
+
+/**
+ * Read embedded surface definition
+ * Creates a surface instance and parses its subtype data
+ */
+function readSurface(chunks, index) {
+  const chunk = chunks[index]
+  let i = index + 1
+  const subtype = chunk.val || chunk.value
+
+  // Check tag type for valid surface
+  if (chunk.tag === TAG_UTF8_U8 || chunk.tag === TAG_IDENT || chunk.tag === TAG_SUBIDENT) {
+    // Null surface check
+    if (subtype === 'null_surface' || subtype === 'nullbs') {
+      return [null, i]
+    }
+
+    // If we don't have the surface mappings yet (before initialization), return stub
+    if (!SURFACES) {
+      console.warn(`readSurface: SURFACES mapping not initialized, returning stub for '${subtype}'`)
+      return [{ type: subtype, index: i }, i]
+    }
+
+    // Get the surface class
+    const SurfaceClass = SURFACES[subtype]
+    if (SurfaceClass === undefined) {
+      console.warn(`readSurface: Unknown surface type '${subtype}'`)
+      return [{ type: subtype, index: i }, i]
+    }
+
+    // Null mapping means null surface
+    if (SurfaceClass === null) {
+      return [null, i]
+    }
+
+    try {
+      // Create instance and parse subtype
+      const surface = new SurfaceClass()
+      surface.subtype = subtype
+      const newIndex = surface.setSubtype(chunks, i)
+      return [surface, newIndex]
+    } catch (e) {
+      console.error(`readSurface: Error parsing surface type '${subtype}':`, e)
+      throw new Error(`Unknown surface-type '${subtype}'!`)
+    }
+  }
+
+  // FIXME: this is a dirty hack from Python (lines 709-715)
+  if (chunk.tag === TAG_DOUBLE) {
+    const [a, i2] = getFloats(chunks, index, 5)
+    return [null, i2]
+  }
+  if (chunk.tag === TAG_POSITION || chunk.tag === TAG_VECTOR_3D) {
+    const [a, i2] = getFloats(chunks, i, 2)
+    return [null, i2]
+  }
+
+  return [null, i]
+}
+
+// ============================================================================
+// Law Reader (Python readLaw lines 659-677)
+// ============================================================================
+
+// Transform class reference (set via setter to avoid circular deps)
+let TransformClass = null
+
+/**
+ * Set the Transform class (called from index.js after all modules loaded)
+ */
+function setTransformClass(cls) {
+  TransformClass = cls
+}
+
+/**
+ * Read law (readLaw in Python lines 659-677)
+ * Handles special cases: TRANS, EDGE, SPLINE_LAW, plus formula expressions
+ */
+function readLaw(chunks, index) {
+  const [name, i1] = getText(chunks, index)
+
+  // Null law
+  if (name === 'null_law') {
+    return [[name, null], i1]
+  }
+
+  // Special law types (Python lines 661-676)
+  if (name === 'TRANS') {
+    // Transform law: parse a Transform inline
+    if (!TransformClass) {
+      console.warn('readLaw: TransformClass not initialized for TRANS type')
+      return [[name, null], i1]
+    }
+    const transform = new TransformClass()
+    const i2 = transform.setBulk(chunks, i1)
+    return [[name, transform], i2]
+  }
+
+  if (name === 'EDGE') {
+    // Edge law: curve + 2 floats (parameter range)
+    const [curve, i2] = readCurve(chunks, i1)
+    const [floats, i3] = getFloats(chunks, i2, 2)
+    return [[name, curve, floats], i3]
+  }
+
+  if (name === 'SPLINE_LAW') {
+    // Spline law: integer + 2 float arrays + point
+    const [a, i2] = getInteger(chunks, i1)
+    const [b, i3] = getFloatArray(chunks, i2)
+    const [c, i4] = getFloatArray(chunks, i3)
+    const [d, i5] = getPoint(chunks, i4)
+    return [[name, a, b, c, d], i5]
+  }
+
+  // Read sub-laws based on type (formula expressions)
+  const subLaws = []
+  let i = i1
+
+  // Different law types have different data
+  switch (name) {
+    case 'vec':
+    case 'vector': {
+      // Vector law: 3 sub-laws for x, y, z
+      for (let k = 0; k < 3; k++) {
+        const [subLaw, i2] = readLaw(chunks, i)
+        subLaws.push(subLaw)
+        i = i2
+      }
+      break
+    }
+
+    case 'add':
+    case 'sub':
+    case 'mult':
+    case 'div':
+    case 'cross':
+    case 'dot': {
+      // Binary operators: 2 sub-laws
+      const [law1, i2] = readLaw(chunks, i)
+      const [law2, i3] = readLaw(chunks, i2)
+      subLaws.push(law1, law2)
+      i = i3
+      break
+    }
+
+    case 'neg':
+    case 'norm':
+    case 'size':
+    case 'cos':
+    case 'sin':
+    case 'tan':
+    case 'exp':
+    case 'ln':
+    case 'sqrt': {
+      // Unary operators: 1 sub-law
+      const [subLaw, i2] = readLaw(chunks, i)
+      subLaws.push(subLaw)
+      i = i2
+      break
+    }
+
+    case 'const':
+    case 'constant': {
+      // Constant value
+      const [val, i2] = getFloat(chunks, i)
+      subLaws.push(val)
+      i = i2
+      break
+    }
+
+    case 'identity':
+    case 'X': {
+      // Identity/variable - no sub-laws
+      break
+    }
+
+    default:
+      // Unknown law type - return as Law object (Python line 677)
+      // Just return the name, caller can handle unknown types
+      console.warn(`Unknown law type: ${name}`)
+  }
+
+  return [[name, subLaws], i]
+}
+
+// ============================================================================
+// Formula Reader (Python readFormula lines 1063-1072)
+// ============================================================================
+
+/**
+ * Read formula (Python lines 1063-1072)
+ * Reads formula name + count + array of laws
+ */
+function readFormula(chunks, index) {
+  const [frml, i1] = getValue(chunks, index)
+
+  // Null law
+  if (frml === 'null_law') {
+    return [[null, []], i1]
+  }
+
+  // Read count of sub-laws
+  const [n, i2] = getInteger(chunks, i1)
+
+  // Read n laws
+  const vars = []
+  let i = i2
+  for (let k = 0; k < n; k++) {
+    const [v, i3] = readLaw(chunks, i)
+    vars.push(v)
+    i = i3
+  }
+
+  return [[frml, vars], i]
+}
+
+// ============================================================================
+// Blend Reader (Python lines 651-657)
+// ============================================================================
+
+/**
+ * Read blend data - B-spline curve with sense and factor
+ */
+function readBlend(chunks, index) {
+  const [nubs, i] = readBS2Curve(chunks, index)
+  if (nubs !== null) {
+    let i2 = i
+    ;[nubs.sense, i2] = getEnumByTag(chunks, i2, SENSE)
+    ;[nubs.factor, i2] = getFloat(chunks, i2)
+    return [nubs, i2]
+  }
+  return [null, index]
+}
+
+// ============================================================================
+// Loft Subdata Reader
+// ============================================================================
+
+/**
+ * Read loft section subdata
+ */
+function readLofSubdata(chunks, index) {
+  let i = index
+  const [type, i1] = getInteger(chunks, i)
+  i = i1
+
+  const [n, i2] = getInteger(chunks, i)
+  i = i2
+
+  const [m, i3] = getInteger(chunks, i)
+  i = i3
+
+  const v = []
+  for (let k = 0; k < m; k++) {
+    const [val, i4] = getFloat(chunks, i)
+    v.push(val)
+    i = i4
+  }
+
+  return [[type, n, m, v], i]
+}
+
+// ============================================================================
+// Discontinuity Info Reader (Python lines 717-728)
+// ============================================================================
+
+/**
+ * Read discontinuity info - 6 float arrays + optional boolean
+ */
+function getDiscontinuityInfo(chunks, index, inventor) {
+  let i = index
+
+  // Read 6 float arrays
+  const [a1, i1] = getFloatArray(chunks, i)
+  const [a2, i2] = getFloatArray(chunks, i1)
+  const [a3, i3] = getFloatArray(chunks, i2)
+  const [a4, i4] = getFloatArray(chunks, i3)
+  const [a5, i5] = getFloatArray(chunks, i4)
+  const [a6, i6] = getFloatArray(chunks, i5)
+
+  let e = false
+  let finalIndex = i6
+
+  if (inventor) {
+    ;[e, finalIndex] = getBoolean(chunks, i6)
+  }
+
+  return [[a1, a2, a3, a4, a5, a6, e], finalIndex]
+}
+
+  // ============================================================================
+  // data-classes.js
+  // ============================================================================
+
+/**
+ * ACIS Data Classes
+ * Core data structures for B-Splines, Helix, Range, Interval, etc.
+ * Ported from Acis.py lines 1172-1450
+ */
+
+// ============================================================================
+// Range Class
+// ============================================================================
+
+/**
+ * Represents a range value that can be either infinite ('I') or finite ('F')
+ */
+class Range {
+  constructor(type, limit, scale = 1.0) {
+    this.type = type    // 'I' for infinite, 'F' for finite
+    this.limit = limit
+    this.scale = scale
+  }
+
+  toString() {
+    return this.type === 'I' ? 'I' : `F ${this.getLimit()}`
+  }
+
+  getLimit() {
+    return this.type === 'I' ? this.limit : this.limit * this.scale
+  }
+
+  equals(other) {
+    if (other instanceof Range) {
+      return this.getLimit() === other.getLimit()
+    }
+    return this.getLimit() === other
+  }
+
+  subtract(other) {
+    if (other instanceof Range) {
+      return this.getLimit() - other.getLimit()
+    }
+    return this.getLimit() - other
+  }
+
+  add(other) {
+    if (other instanceof Range) {
+      return this.getLimit() + other.getLimit()
+    }
+    return this.getLimit() + other
+  }
+}
+
+// ============================================================================
+// Interval Class
+// ============================================================================
+
+/**
+ * Represents an interval with lower and upper Range bounds
+ */
+class Interval {
+  constructor(lower, upper) {
+    this.lower = lower
+    this.upper = upper
+  }
+
+  toString() {
+    return `${this.lower} ${this.upper}`
+  }
+
+  getLowerType() { return this.lower.type }
+  getLowerLimit() { return this.lower.getLimit() }
+  getUpperType() { return this.upper.type }
+  getUpperLimit() { return this.upper.getLimit() }
+  getLimit() { return this.getUpperLimit() - this.getLowerLimit() }
+}
+
+// ============================================================================
+// B-Spline Curve Class
+// ============================================================================
+
+/**
+ * B-Spline curve data structure
+ */
+class BS_Curve {
+  /**
+   * @param {boolean} rational - True for NURBS, False for NUBS
+   * @param {boolean} periodic - True for closed curves
+   * @param {number} degree - Curve degree
+   */
+  constructor(rational, periodic, degree) {
+    this.poles = []           // Array of {x, y, z} points
+    this.uMults = []          // Knot multiplicities
+    this.uKnots = []          // Knot values
+    this.uPeriodic = periodic
+    this.uDegree = degree
+    this.weights = []         // Weights (same length as poles for rational)
+    this.rational = rational
+  }
+}
+
+// ============================================================================
+// B-Spline Surface Class
+// ============================================================================
+
+/**
+ * B-Spline surface data structure
+ */
+class BS_Surface extends BS_Curve {
+  /**
+   * @param {boolean} rational - True for NURBS
+   * @param {boolean} uPeriodic - Periodic in U direction
+   * @param {boolean} vPeriodic - Periodic in V direction
+   * @param {number} uDegree - Degree in U direction
+   * @param {number} vDegree - Degree in V direction
+   */
+  constructor(rational, uPeriodic, vPeriodic, uDegree, vDegree) {
+    super(rational, uPeriodic, uDegree)
+    this.poles = [[]]         // 2D array of points
+    this.weights = [[]]       // 2D array of weights
+    this.vMults = []
+    this.vKnots = []
+    this.vPeriodic = vPeriodic
+    this.vDegree = vDegree
+  }
+}
+
+// ============================================================================
+// Helix Class
+// ============================================================================
+
+/**
+ * Helix curve data structure
+ */
+class Helix {
+  constructor() {
+    this.radAngles = new Interval(new Range('I', 1.0), new Range('I', 1.0))
+    this.posCenter = { ...CENTER }
+    this.dirMajor = { ...DIR_X }
+    this.dirMinor = { ...DIR_Y }
+    this.dirPitch = { ...DIR_Z }
+    this.facApex = MIN_0
+    this.vecAxis = { ...DIR_Z }
+  }
+
+  toString() {
+    return `${this.radAngles} ${JSON.stringify(this.posCenter)} ${JSON.stringify(this.dirMajor)} ` +
+           `${JSON.stringify(this.dirMinor)} ${JSON.stringify(this.dirPitch)} ${this.facApex} ` +
+           `${JSON.stringify(this.vecAxis)}`
+  }
+
+  getPitch() {
+    return SIZE(this.dirPitch)
+  }
+
+  getHeight() {
+    const angle = this.radAngles.getLimit()
+    const pitch = this.getPitch()
+    return pitch * angle / 2.0 / Math.PI
+  }
+
+  getRadius() {
+    const majLen = SIZE(this.dirMajor)
+    const minLen = SIZE(this.dirMinor)
+    if (!isEqual1D(majLen, minLen)) {
+      console.warn('Helix: elliptical helix not fully supported')
+    }
+    return majLen
+  }
+
+  getApexAngle() {
+    const radApexAngle = Math.atan2(this.facApex * this.getRadius(), this.getPitch())
+    return degrees(radApexAngle)
+  }
+
+  isLeftHanded() {
+    const cross = CROSS(this.vecAxis, this.dirMajor)
+    const angle = Math.acos(Math.max(-1, Math.min(1,
+      (cross.x * this.dirMinor.x + cross.y * this.dirMinor.y + cross.z * this.dirMinor.z) /
+      (SIZE(cross) * SIZE(this.dirMinor))
+    )))
+    return angle < 0.1
+  }
+
+  /**
+   * Calculate parameter steps for helix interpolation
+   */
+  static calcSteps(a, b, numSegments = 6) {
+    const startSegment = 0.05 // ~1 degree to smooth start
+    const steps = [a, a + startSegment]
+
+    const d = b - a
+    const step = d / Math.ceil(numSegments * d / 2 / Math.PI)
+    let c = a
+    while (c < (b - startSegment)) {
+      c += step
+      steps.push(c)
+    }
+
+    steps.splice(steps.length - 1, 0, b - startSegment)
+    return steps
+  }
+
+  /**
+   * Calculate point on helix at parameter u
+   */
+  static calcPoint(u, minU, a, rMaj, rMin, handed, pitch) {
+    const deltaU = (u - minU) / 2 / Math.PI
+    const fac = 1 + a * deltaU
+    const x = rMaj * fac * Math.cos(u)
+    const y = rMin * fac * Math.sin(u) * handed
+    const z = pitch * deltaU
+    return { x, y, z }
+  }
+
+  /**
+   * Build helix curve points for interpolation
+   * @returns {Array<{x,y,z}>} Array of points
+   */
+  buildPoints() {
+    const minU = this.radAngles.getLowerLimit()
+    const maxU = this.radAngles.getUpperLimit()
+    const rMaj = SIZE(this.dirMajor)
+    const rMin = SIZE(this.dirMinor)
+    const pitch = SIZE(this.dirPitch)
+    const stepsU = Helix.calcSteps(minU, maxU)
+    const handed = this.isLeftHanded() ? 1 : -1
+    const points = []
+
+    for (const u of stepsU) {
+      const c = Helix.calcPoint(u, minU, this.facApex, rMaj, rMin, handed, pitch)
+      points.push(c)
+    }
+
+    return points
+  }
+}
+
+// ============================================================================
+// Loft Data Classes
+// ============================================================================
+
+class LoftData {
+  constructor() {
+    this.surface = null
+    this.bs2cur = null
+    this.e1 = false
+    this.type = 213
+    this.n = 1
+    this.m = 1
+    this.v = []
+    this.e2 = false
+    this.dir = null
+  }
+}
+
+class Skin {
+  constructor() {
+    this.a1 = [-1, -1, -1, -1]
+    this.f1 = MIN_0
+    this.loft = []
+    this.a2 = [0.0, 0.0, 0.0]
+    this.surf = null
+    this.n = 0
+    this.law = 'null_law'
+    this.pcur = null
+    this.cur = null
+    this.cur2 = null
+    this.vec = null
+    this.f2 = 0
+  }
+}
+
+// ============================================================================
+// Boundary Geometry Classes
+// ============================================================================
+
+/**
+ * Base class for boundary geometry
+ */
+class BDY_GEOM {
+  constructor(svId) {
+    this.svId = svId
+    this.shape = null
+    this._readyToBuild = true
+  }
+
+  build() {
+    if (this._readyToBuild) {
+      this._readyToBuild = false
+      this.buildCurve()
+    }
+    return this.shape
+  }
+
+  buildCurve() {
+    // Override in subclasses
+  }
+}
+
+class BDY_GEOM_CIRCLE extends BDY_GEOM {
+  constructor() {
+    super('circle')
+    this.curve = null
+    this.twist = [null, null]
+    this.parameters = [MIN_0, MAX_2PI]
+    this.sense = 'forward'
+    this.type = 'non_cross'
+    this.magic = { ...CENTER }
+    this.uSmoothing = 'non_smooth'
+    this.vSmoothing = 'non_smooth'
+    this.fullness = 0
+  }
+
+  buildCurve() {
+    if (this.curve !== null) {
+      const u = this.parameters[0]
+      const v = this.parameters[1]
+      this.shape = this.curve.build(u, v)
+    }
+  }
+}
+
+class BDY_GEOM_DEG extends BDY_GEOM {
+  constructor() {
+    super('deg')
+    this.location = { ...CENTER }
+    this.normal1 = { ...DIR_X }
+    this.normal2 = { ...DIR_Y }
+    this.type = 'non_cross'
+    this.magic = { ...CENTER }
+    this.uSmoothing = 'non_smooth'
+    this.vSmoothing = 'non_smooth'
+    this.fullness = 0
+  }
+
+  buildCurve() {
+    // Creates a point shape
+    this.shape = { type: 'point', location: this.location }
+  }
+}
+
+class BDY_GEOM_PCURVE extends BDY_GEOM {
+  constructor() {
+    super('pcurve')
+    this.surface = null
+    this.pcurve = null
+    this.sense = 'forward'
+    this.fittolerance = 0.0
+    this.type = 'non_cross'
+    this.magic = { ...CENTER }
+    this.uSmoothing = 'non_smooth'
+    this.vSmoothing = 'non_smooth'
+    this.fullness = 0
+  }
+
+  buildCurve() {
+    // Build curve from pcurve on surface
+    // This requires the OpenCascade geometry builder
+  }
+}
+
+class BDY_GEOM_PLANE extends BDY_GEOM {
+  constructor() {
+    super('plane')
+    this.normal = { ...DIR_Z }
+    this.parameters = [MIN_0, 1.0]
+    this.curve = null
+    this.type = 'non_cross'
+    this.magic = { ...CENTER }
+    this.uSmoothing = 'non_smooth'
+    this.vSmoothing = 'non_smooth'
+    this.fullness = 0
+  }
+
+  buildCurve() {
+    if (this.curve !== null) {
+      const u = this.parameters[0]
+      const v = this.parameters[1]
+      this.shape = this.curve.build(u, v)
+    }
+  }
+}
+
+// ============================================================================
+// Index Mappings (for DC attributes)
+// ============================================================================
+
+class IndexMappings {
+  constructor() {
+    this.attributes = []
+  }
+
+  append(attr) {
+    this.attributes.push(attr)
+  }
+
+  _getTypedOwners(ownerType) {
+    const result = new Map()
+    for (const a of this.attributes) {
+      const owner = a.getOwner()
+      if (owner && owner.getType() === ownerType) {
+        if (!result.has(owner.index)) {
+          result.set(owner.index, owner)
+        }
+      }
+    }
+    return Array.from(result.values())
+  }
+
+  getEdges() {
+    return this._getTypedOwners('edge')
+  }
+
+  getFaces() {
+    return this._getTypedOwners('face')
+  }
+}
+
+// ============================================================================
+// VBL Classes Map
+// ============================================================================
+
+const VBL_CLASSES = {
+  'circle': BDY_GEOM_CIRCLE,
+  'deg': BDY_GEOM_DEG,
+  'pcurve': BDY_GEOM_PCURVE,
+  'plane': BDY_GEOM_PLANE
+}
+
+  // ============================================================================
+  // entity.js
+  // ============================================================================
 
 /**
  * ACIS Entity Classes
  * Base entity class and simple entity types
  * Ported from Acis.py lines 1527-1628
  */
-
-
 
 // ============================================================================
 // Base Entity Class
@@ -2446,482 +2294,36 @@ class AsmHeader extends Entity {
   }
 }
 
+  // ============================================================================
+  // attributes.js
+  // ============================================================================
+
+/**
+ * ACIS Attribute Classes
+ * Attribute entities for colors, names, and metadata
+ * Ported from Acis.py lines 4133-4700
+ */
+
 // ============================================================================
-// topology.js
+// Base Attributes Class
 // ============================================================================
 
 /**
- * ACIS Topology Classes
- * Topology entities: Body, Lump, Shell, Face, Loop, Wire, CoEdge, Edge, Vertex
- * Ported from Acis.py lines 1628-2060
+ * Base class for attribute entities
  */
-
-
-
-
-// ============================================================================
-// Base Topology Class
-// ============================================================================
-
-/**
- * Base class for topology entities
- * Based on Acis.py Topology class and _handle_topology_DEFAULT function
- */
-class Topology extends Entity {
-  constructor() {
-    super()
-  }
-
-  set(record) {
-    let i = super.set(record)
-
-    // _handle_topology_DEFAULT logic from Acis.py lines 187-192
-    const vrs = getVersion()
-    // Skip extra field for non-ASM format when version > 10.0
-    if (vrs > 10.0 && !isASM()) {
-      i++
-    }
-    // Skip another field for version > 6.0
-    if (vrs > 6.0) {
-      i++
-    }
-
-    return i
-  }
-}
-
-// ============================================================================
-// Body Entity
-// ============================================================================
-
-/**
- * Body entity - top-level container for lumps
- */
-class Body extends Topology {
-  constructor() {
-    super()
-    this._lump = null       // First lump
-    this._wire = null       // First wire
-    this._transform = null  // Transform reference
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this._lump, i] = getRefNode(record, i, 'lump')
-    ;[this._wire, i] = getRefNode(record, i, 'wire')
-    ;[this._transform, i] = getRefNode(record, i, 'transform')
-    return i
-  }
-
-  getLump() {
-    return this._lump ? this._lump.entity : null
-  }
-
-  getWire() {
-    return this._wire ? this._wire.entity : null
-  }
-
-  getTransform() {
-    return this._transform ? this._transform.entity : null
-  }
-
-  /**
-   * Get all lumps in this body
-   */
-  getLumps() {
-    const lumps = []
-    let lump = this.getLump()
-    while (lump) {
-      lumps.push(lump)
-      lump = lump.getNext()
-    }
-    return lumps
-  }
-
-  /**
-   * Get all wires in this body
-   */
-  getWires() {
-    const wires = []
-    let wire = this.getWire()
-    while (wire) {
-      wires.push(wire)
-      wire = wire.getNext()
-    }
-    return wires
-  }
-
-  build() {
-    if (this._readyToBuild) {
-      this._readyToBuild = false
-      // Build logic would go here with OpenCascade
-    }
-    return this.shape
-  }
-}
-
-// ============================================================================
-// Lump Entity
-// ============================================================================
-
-/**
- * Lump entity - container for shells
- */
-class Lump extends Topology {
-  constructor() {
-    super()
-    this._next = null   // Next lump in body
-    this._shell = null  // First shell
-    this._owner = null  // Owning body
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this._next, i] = getRefNode(record, i, 'lump')
-    ;[this._shell, i] = getRefNode(record, i, 'shell')
-    ;[this._owner, i] = getRefNode(record, i, 'body')
-    return i
-  }
-
-  getNext() {
-    return this._next ? this._next.entity : null
-  }
-
-  getShell() {
-    return this._shell ? this._shell.entity : null
-  }
-
-  getParent() {
-    return this._owner ? this._owner.entity : null
-  }
-
-  /**
-   * Get all shells in this lump
-   */
-  getShells() {
-    const shells = []
-    let shell = this.getShell()
-    while (shell) {
-      shells.push(shell)
-      shell = shell.getNext()
-    }
-    return shells
-  }
-
-  build() {
-    if (this._readyToBuild) {
-      this._readyToBuild = false
-      // Build logic
-    }
-    return this.shape
-  }
-}
-
-// ============================================================================
-// Shell Entity
-// ============================================================================
-
-/**
- * Shell entity - container for faces
- */
-class Shell extends Topology {
-  constructor() {
-    super()
-    this._next = null     // Next shell in lump
-    this._subshell = null // First subshell
-    this._face = null     // First face
-    this._wire = null     // First wire
-    this._owner = null    // Owning lump
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this._next, i] = getRefNode(record, i, 'shell')
-    ;[this._subshell, i] = getRefNode(record, i, 'subshell')
-    ;[this._face, i] = getRefNode(record, i, 'face')
-    ;[this._wire, i] = getRefNode(record, i, 'wire')
-    ;[this._owner, i] = getRefNode(record, i, 'lump')
-    return i
-  }
-
-  getNext() {
-    return this._next ? this._next.entity : null
-  }
-
-  getFace() {
-    return this._face ? this._face.entity : null
-  }
-
-  getParent() {
-    return this._owner ? this._owner.entity : null
-  }
-
-  /**
-   * Get all faces in this shell
-   */
-  getFaces() {
-    const faces = []
-    let face = this.getFace()
-    const visited = new Set()
-    while (face && !visited.has(face.index)) {
-      visited.add(face.index)
-      faces.push(face)
-      face = face.getNext()
-    }
-    return faces
-  }
-
-  build() {
-    if (this._readyToBuild) {
-      this._readyToBuild = false
-      // Build logic
-    }
-    return this.shape
-  }
-}
-
-// ============================================================================
-// SubShell Entity
-// ============================================================================
-
-/**
- * SubShell entity
- */
-class SubShell extends Topology {
+class Attributes extends Entity {
   constructor() {
     super()
     this._next = null
-    this._child = null
-    this._face = null
-    this._wire = null
+    this._previous = null
     this._owner = null
   }
 
   set(record) {
     let i = super.set(record)
-    ;[this._next, i] = getRefNode(record, i, 'subshell')
-    ;[this._child, i] = getRefNode(record, i, 'subshell')
-    ;[this._face, i] = getRefNode(record, i, 'face')
-    ;[this._wire, i] = getRefNode(record, i, 'wire')
+    ;[this._next, i] = getRefNode(record, i, 'attrib')
+    ;[this._previous, i] = getRefNode(record, i, 'attrib')
     ;[this._owner, i] = getRefNode(record, i, null)
-    return i
-  }
-}
-
-// ============================================================================
-// Face Entity
-// ============================================================================
-
-/**
- * Face entity - container for loops with a surface
- */
-class Face extends Topology {
-  constructor() {
-    super()
-    this._next = null     // Next face in shell
-    this._loop = null     // First loop
-    this._shell = null    // Owning shell
-    this._subshell = null // Owning subshell
-    this._surface = null  // Surface geometry
-    this.sense = 'forward'
-    this.sides = 'single'
-    this.side = null
-    this.containment = null
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this._next, i] = getRefNode(record, i, 'face')
-    ;[this._loop, i] = getRefNode(record, i, 'loop')
-    ;[this._shell, i] = getRefNode(record, i, 'shell')
-    ;[this._subshell, i] = getRefNode(record, i, 'subshell')
-    ;[this._surface, i] = getRefNode(record, i, 'surface')
-    ;[this.sense, i] = getEnumByTag(record.chunks, i, SENSE)
-
-    // Handle sides
-    const [sides, i2] = getEnumByTag(record.chunks, i, SIDES)
-    this.sides = sides
-    i = i2
-    if (sides === 'double') {
-      ;[this.side, i] = getEnumByTag(record.chunks, i, SIDE)
-    }
-
-    // Version-specific containment
-    if (getVersion() > 5.0) {
-      ;[this.containment, i] = getEnumByTag(record.chunks, i, { 0: 'unset', 1: 'set' })
-    }
-
-    return i
-  }
-
-  getNext() {
-    return this._next ? this._next.entity : null
-  }
-
-  getLoop() {
-    return this._loop ? this._loop.entity : null
-  }
-
-  getSurface() {
-    return this._surface ? this._surface.entity : null
-  }
-
-  getParent() {
-    return this._shell ? this._shell.entity : null
-  }
-
-  /**
-   * Get all loops in this face
-   */
-  getLoops() {
-    const loops = []
-    let loop = this.getLoop()
-    const visited = new Set()
-    while (loop && !visited.has(loop.index)) {
-      visited.add(loop.index)
-      loops.push(loop)
-      loop = loop.getNext()
-    }
-    return loops
-  }
-
-  build() {
-    if (this._readyToBuild) {
-      this._readyToBuild = false
-      // Build logic
-    }
-    return this.shape
-  }
-}
-
-// ============================================================================
-// Loop Entity
-// ============================================================================
-
-/**
- * Loop entity - container for coedges
- */
-class Loop extends Topology {
-  constructor() {
-    super()
-    this._next = null    // Next loop in face
-    this._coedge = null  // First coedge
-    this._face = null    // Owning face
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this._next, i] = getRefNode(record, i, 'loop')
-    ;[this._coedge, i] = getRefNode(record, i, 'coedge')
-    ;[this._face, i] = getRefNode(record, i, 'face')
-    return i
-  }
-
-  getNext() {
-    return this._next ? this._next.entity : null
-  }
-
-  getCoedge() {
-    return this._coedge ? this._coedge.entity : null
-  }
-
-  getParent() {
-    return this._face ? this._face.entity : null
-  }
-
-  /**
-   * Get all coedges in this loop
-   */
-  getCoedges() {
-    const coedges = []
-    let coedge = this.getCoedge()
-    const visited = new Set()
-    while (coedge && !visited.has(coedge.index)) {
-      visited.add(coedge.index)
-      coedges.push(coedge)
-      coedge = coedge.getNext()
-    }
-    return coedges
-  }
-
-  build() {
-    if (this._readyToBuild) {
-      this._readyToBuild = false
-      // Build logic
-    }
-    return this.shape
-  }
-}
-
-// ============================================================================
-// Wire Entity
-// ============================================================================
-
-/**
- * Wire entity - standalone edge container
- */
-class Wire extends Topology {
-  constructor() {
-    super()
-    this._next = null
-    this._coedge = null
-    this._owner = null  // Shell or body
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this._next, i] = getRefNode(record, i, 'wire')
-    ;[this._coedge, i] = getRefNode(record, i, 'coedge')
-    ;[this._owner, i] = getRefNode(record, i, null)
-    return i
-  }
-
-  getNext() {
-    return this._next ? this._next.entity : null
-  }
-
-  getCoedge() {
-    return this._coedge ? this._coedge.entity : null
-  }
-
-  getParent() {
-    return this._owner ? this._owner.entity : null
-  }
-}
-
-// ============================================================================
-// CoEdge Entity
-// ============================================================================
-
-/**
- * CoEdge entity - edge with direction/sense in a loop
- */
-class CoEdge extends Topology {
-  constructor() {
-    super()
-    this._next = null      // Next coedge in loop
-    this._previous = null  // Previous coedge in loop
-    this._partner = null   // Partner coedge (shared edge)
-    this._edge = null      // Edge geometry
-    this._owner = null     // Owning loop or wire
-    this._pcurve = null    // Parameter curve on surface
-    this.sense = 'forward'
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this._next, i] = getRefNode(record, i, 'coedge')
-    ;[this._previous, i] = getRefNode(record, i, 'coedge')
-    ;[this._partner, i] = getRefNode(record, i, 'coedge')
-    ;[this._edge, i] = getRefNode(record, i, 'edge')
-    ;[this.sense, i] = getEnumByTag(record.chunks, i, SENSE)
-    ;[this._owner, i] = getRefNode(record, i, null) // loop or wire
-
-    // Optional pcurve
-    if (i < record.chunks.length && record.chunks[i].tag === TAG_ENTITY_REF) {
-      ;[this._pcurve, i] = getRefNode(record, i, 'pcurve')
-    }
-
     return i
   }
 
@@ -2933,264 +2335,490 @@ class CoEdge extends Topology {
     return this._previous ? this._previous.entity : null
   }
 
-  getPartner() {
-    return this._partner ? this._partner.entity : null
-  }
-
-  getEdge() {
-    return this._edge ? this._edge.entity : null
-  }
-
-  getParent() {
+  getOwner() {
     return this._owner ? this._owner.entity : null
   }
+}
 
-  getPcurve() {
-    return this._pcurve ? this._pcurve.entity : null
+// ============================================================================
+// Attrib Base
+// ============================================================================
+
+class Attrib extends Attributes {
+  constructor() {
+    super()
+  }
+}
+
+// ============================================================================
+// ADesk (AutoDesk) Attributes
+// ============================================================================
+
+class AttribADesk extends Attrib {
+  constructor() {
+    super()
+  }
+}
+
+class AttribADeskColor extends AttribADesk {
+  constructor() {
+    super()
+    this.colorIndex = 0
   }
 
-  build() {
-    if (this._readyToBuild) {
-      this._readyToBuild = false
-      const edge = this.getEdge()
-      if (edge) {
-        this.shape = edge.build()
-        if (this.shape && this.sense === 'reversed') {
-          // Reverse the shape
-        }
+  set(record) {
+    let i = super.set(record)
+    ;[this.colorIndex, i] = getInteger(record.chunks, i)
+    return i
+  }
+}
+
+class AttribADeskMaterial extends AttribADesk {
+  constructor() {
+    super()
+    this.val1 = 0
+    this.val2 = 0
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this.val1, i] = getInteger(record.chunks, i)
+    ;[this.val2, i] = getInteger(record.chunks, i)
+    return i
+  }
+}
+
+class AttribADeskTrueColor extends AttribADesk {
+  constructor() {
+    super()
+    this.alpha = 0.0
+    this.red = 0.749
+    this.green = 0.749
+    this.blue = 0.749
+  }
+
+  set(record) {
+    let i = super.set(record)
+    const [rgba, i2] = getInteger(record.chunks, i)
+    this.alpha = ((rgba >> 24) & 0xFF) / 255.0
+    this.red = ((rgba >> 16) & 0xFF) / 255.0
+    this.green = ((rgba >> 8) & 0xFF) / 255.0
+    this.blue = (rgba & 0xFF) / 255.0
+    return i2
+  }
+
+  getColor() {
+    return { r: this.red, g: this.green, b: this.blue, a: this.alpha }
+  }
+}
+
+// ============================================================================
+// Ansoft Attributes
+// ============================================================================
+
+class AttribAnsoft extends Attrib {
+  constructor() {
+    super()
+  }
+}
+
+class AttribAnsoftId extends AttribAnsoft {
+  constructor() {
+    super()
+  }
+}
+
+class AttribAnsoftProperties extends AttribAnsoft {
+  constructor() {
+    super()
+  }
+}
+
+// ============================================================================
+// BT Attributes
+// ============================================================================
+
+class AttribBt extends Attrib {
+  constructor() {
+    super()
+  }
+}
+
+class AttribBtEntityColor extends AttribBt {
+  constructor() {
+    super()
+  }
+}
+
+// ============================================================================
+// Gen (Generic) Attributes
+// ============================================================================
+
+class AttribGen extends Attrib {
+  constructor() {
+    super()
+  }
+}
+
+class AttribGenName extends AttribGen {
+  constructor() {
+    super()
+    this.text = ''
+  }
+
+  set(record) {
+    let i = super.set(record)
+    const vers = getVersion()
+    if (vers > 1.7) {
+      if (vers < 16.0 || isASM()) {
+        i += 4 // Skip [(keep|copy), (keep_keep), (ignore), (copy)]
       }
+      ;[this.text, i] = getText(record.chunks, i)
     }
-    return this.shape
+    return i
+  }
+
+  getName() {
+    return this.text
   }
 }
 
-/**
- * Tolerant CoEdge
- */
-class CoEdgeTolerance extends CoEdge {
+class AttribGenNameInt32 extends AttribGenName {
   constructor() {
     super()
-    this.tolerance = 0.0
+    this.value = 0
   }
 
   set(record) {
     let i = super.set(record)
-    ;[this.tolerance, i] = getFloat(record.chunks, i)
+    ;[this.value, i] = getInteger(record.chunks, i)
     return i
   }
 }
 
-// ============================================================================
-// Edge Entity
-// ============================================================================
-
-/**
- * Edge entity - curve between two vertices
- */
-class Edge extends Topology {
+class AttribGenNameInt64 extends AttribGenName {
   constructor() {
     super()
-    this._start = null   // Start vertex
-    this._end = null     // End vertex
-    this._owner = null   // Owning coedge
-    this._curve = null   // Curve geometry
-    this.sense = 'forward'
+    this.value = 0
   }
 
   set(record) {
     let i = super.set(record)
-    ;[this._start, i] = getRefNode(record, i, 'vertex')
-
-    // Read start parameter (float after start vertex)
-    if (i < record.chunks.length && record.chunks[i] &&
-        (record.chunks[i].tag === 0x06 || record.chunks[i].tag === 0x05)) {
-      ;[this.parameter1, i] = getFloat(record.chunks, i)
-    }
-
-    ;[this._end, i] = getRefNode(record, i, 'vertex')
-
-    // Read end parameter (float after end vertex)
-    if (i < record.chunks.length && record.chunks[i] &&
-        (record.chunks[i].tag === 0x06 || record.chunks[i].tag === 0x05)) {
-      ;[this.parameter2, i] = getFloat(record.chunks, i)
-    }
-
-    ;[this._owner, i] = getRefNode(record, i, 'coedge')
-    ;[this._curve, i] = getRefNode(record, i, 'curve')
-    ;[this.sense, i] = getEnumByTag(record.chunks, i, SENSE)
-
+    ;[this.value, i] = getInteger(record.chunks, i)
     return i
-  }
-
-  getStart() {
-    const v = this._start ? this._start.entity : null
-    return v ? v.getPosition() : null
-  }
-
-  getEnd() {
-    const v = this._end ? this._end.entity : null
-    return v ? v.getPosition() : null
-  }
-
-  getCurve() {
-    return this._curve ? this._curve.entity : null
-  }
-
-  getParent() {
-    return this._owner ? this._owner.entity : null
-  }
-
-  getPoints() {
-    const points = []
-    const ptStart = this._start ? this._start.entity : null
-    if (ptStart) points.push(ptStart.getPosition())
-    const ptEnd = this._end ? this._end.entity : null
-    if (ptEnd && ptEnd.index !== (ptStart ? ptStart.index : -1)) {
-      points.push(ptEnd.getPosition())
-    }
-    return points
-  }
-
-  build() {
-    if (this._readyToBuild) {
-      this._readyToBuild = false
-      const curve = this.getCurve()
-      if (curve) {
-        const p1 = this.getStart()
-        const p2 = this.getEnd()
-        this.shape = curve.build(p1, p2)
-        if (this.shape && this.sense === 'reversed') {
-          // Reverse the shape
-        }
-      }
-    }
-    return this.shape
   }
 }
 
-/**
- * Tolerant Edge
- */
-class EdgeTolerance extends Edge {
+class AttribGenNameString extends AttribGenName {
   constructor() {
     super()
-    this.tolerance = 0.0
+    this.value = ''
   }
 
   set(record) {
     let i = super.set(record)
-    // Tolerance is read in parent class for some versions
+    ;[this.value, i] = getText(record.chunks, i)
     return i
   }
 }
 
-// ============================================================================
-// Vertex Entity
-// ============================================================================
-
-/**
- * Vertex entity - point in topology
- */
-class Vertex extends Topology {
+class AttribGenNameReal extends AttribGenName {
   constructor() {
     super()
-    this._owner = null  // Owning edge
-    this._point = null  // Point geometry
-    this.count = -1     // Number of edges using this vertex
+    this.value = 0.0
   }
 
   set(record) {
     let i = super.set(record)
-    ;[this._owner, i] = getRefNode(record, i, 'edge')
-
-    if (getAsmMajor() > 217) {
-      i += 1 // skip
-    }
-
-    // Inventor workaround
-    if (record.chunks[i] && record.chunks[i].tag !== TAG_ENTITY_REF) {
-      i += 1 // skip count
-    }
-
-    ;[this._point, i] = getRefNode(record, i, 'point')
-
+    ;[this.value, i] = getFloat(record.chunks, i)
     return i
-  }
-
-  getParent() {
-    return this._owner ? this._owner.entity : null
-  }
-
-  getPoint() {
-    return this._point ? this._point.entity : null
-  }
-
-  getPosition() {
-    const p = this.getPoint()
-    return p ? p.position : null
   }
 }
 
-/**
- * Tolerant Vertex
- */
-class VertexTolerance extends Vertex {
+class AttribGenNameVector extends AttribGenName {
   constructor() {
     super()
-    this.tolerance = 0.0
+    this.value = { x: 0, y: 0, z: 0 }
   }
 
   set(record) {
     let i = super.set(record)
-    ;[this.tolerance, i] = getFloat(record.chunks, i)
+    const [x, i2] = getFloat(record.chunks, i)
+    const [y, i3] = getFloat(record.chunks, i2)
+    const [z, i4] = getFloat(record.chunks, i3)
+    this.value = { x, y, z }
+    return i4
+  }
+}
 
-    if (getAsmMajor() > 217) {
-      i += 2 // skip floats
-    }
+// ============================================================================
+// ST (Standard) Attributes
+// ============================================================================
 
+class AttribSt extends Attrib {
+  constructor() {
+    super()
+  }
+}
+
+class AttribStNoMerge extends AttribSt {
+  constructor() {
+    super()
+  }
+}
+
+class AttribStNoCombine extends AttribSt {
+  constructor() {
+    super()
+  }
+}
+
+class AttribStRgbColor extends AttribSt {
+  constructor() {
+    super()
+    this.red = 0.749
+    this.green = 0.749
+    this.blue = 0.749
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this.red, i] = getFloat(record.chunks, i)
+    ;[this.green, i] = getFloat(record.chunks, i)
+    ;[this.blue, i] = getFloat(record.chunks, i)
     return i
   }
+
+  getColor() {
+    return { r: this.red, g: this.green, b: this.blue }
+  }
 }
 
-// ============================================================================
-// Cell Entities (for cellular topology)
-// ============================================================================
-
-class Cell extends Topology {
+class AttribStDisplay extends AttribSt {
   constructor() {
     super()
   }
 }
 
-class Cell3d extends Cell {
-  constructor() {
-    super()
-  }
-}
-
-class CFace extends Topology {
-  constructor() {
-    super()
-  }
-}
-
-class CShell extends Topology {
+class AttribStId extends AttribSt {
   constructor() {
     super()
   }
 }
 
 // ============================================================================
-// curves.js
+// Sys (System) Attributes
 // ============================================================================
+
+class AttribSys extends Attrib {
+  constructor() {
+    super()
+  }
+}
+
+class AttribSysConvexity extends AttribSys {
+  constructor() {
+    super()
+  }
+}
+
+class AttribSysAnnotationAttrib extends AttribSys {
+  constructor() {
+    super()
+  }
+}
+
+class AttribSysStichHint extends AttribSys {
+  constructor() {
+    super()
+  }
+}
+
+class AttribSysTag extends AttribSys {
+  constructor() {
+    super()
+  }
+}
+
+class AttribSysVertedge extends AttribSys {
+  constructor() {
+    super()
+  }
+}
+
+// ============================================================================
+// TSL Attributes
+// ============================================================================
+
+class AttribTsl extends Attrib {
+  constructor() {
+    super()
+  }
+}
+
+class AttribTslId extends AttribTsl {
+  constructor() {
+    super()
+  }
+}
+
+class AttribTslColour extends AttribTsl {
+  constructor() {
+    super()
+    this.red = 0.749
+    this.green = 0.749
+    this.blue = 0.749
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this.red, i] = getFloat(record.chunks, i)
+    ;[this.green, i] = getFloat(record.chunks, i)
+    ;[this.blue, i] = getFloat(record.chunks, i)
+    return i
+  }
+
+  getColor() {
+    return { r: this.red, g: this.green, b: this.blue }
+  }
+}
+
+// ============================================================================
+// Other Attribute Types (stub classes)
+// ============================================================================
+
+class AttribAtUfld extends Attrib { constructor() { super() } }
+class AttribAtUfldDefmData extends AttribAtUfld { constructor() { super() } }
+class AttribAtUfldDevPair extends AttribAtUfld { constructor() { super() } }
+class AttribAtUfldFlatBend extends AttribAtUfld { constructor() { super() } }
+class AttribAtUfldFfldPosTransf extends AttribAtUfld { constructor() { super() } }
+class AttribAtUfldFfldPosTransfMixUfContourRollTrack extends AttribAtUfldFfldPosTransf { constructor() { super() } }
+class AttribAtUfldFfldPosTransfMixUfTransformTrack extends AttribAtUfldFfldPosTransf { constructor() { super() } }
+class AttribAtUfldNonMergeBend extends AttribAtUfld { constructor() { super() } }
+class AttribAtUfldPosTrack extends AttribAtUfld { constructor() { super() } }
+class AttribAtUfldPosTrackMixUfRobustPositionTrack extends AttribAtUfldPosTrack { constructor() { super() } }
+class AttribAtUfldPosTrackSurfSimp extends AttribAtUfldPosTrack { constructor() { super() } }
+class AttribAcadSolidHistoryPersubent extends Attrib { constructor() { super() } }
+class AttribCwkBase extends Attrib { constructor() { super() } }
+class AttribCwkBaseCswDbid extends AttribCwkBase { constructor() { super() } }
+class AttribCustom extends Attrib { constructor() { super() } }
+class AttribDesigner extends Attrib { constructor() { super() } }
+class AttribDesignerHistory extends AttribDesigner { constructor() { super() } }
+class AttribDesignerSurfaceId extends AttribDesigner { constructor() { super() } }
+class AttribDesignerOwnerTag extends AttribDesigner { constructor() { super() } }
+class AttribDxid extends Attrib { constructor() { super() } }
+class AttribEye extends Attrib { constructor() { super() } }
+class AttribEyeFMesh extends AttribEye { constructor() { super() } }
+class AttribEyePtList extends AttribEye { constructor() { super() } }
+class AttribEyeRefVt extends AttribEye { constructor() { super() } }
+class AttribFdi extends Attrib { constructor() { super() } }
+class AttribFdiLabel extends AttribFdi { constructor() { super() } }
+class AttribKcId extends Attrib { constructor() { super() } }
+class AttribLwd extends Attrib { constructor() { super() } }
+class AttribLwdFMesh extends AttribLwd { constructor() { super() } }
+class AttribLwdPtList extends AttribLwd { constructor() { super() } }
+class AttribLwdRefVT extends AttribLwd { constructor() { super() } }
+class AttribMixOrganization extends Attrib { constructor() { super() } }
+class AttribMixOrganizationBendCenterEdge extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationBendExtendedEdge extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationBendExtendedEdgeProgenitorTagIds extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationBendExtendPlane extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationCornerEdge extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationCreEntityQuality extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationDecalEntity extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationDetailEdgeInfo extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationEntityQuality extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationFlangeTrimEdge extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationFlatPatternVis extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationJacobiCornerEdge extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationLimitTrackingFraceFrom extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationLoftedFlangeNotch extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationNoBendRelief extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationNoCenterline extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationRefoldInfo extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationRolExtents extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationSmoothBendEdge extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationTraceFace extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationUfContourRollExtentTrack extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationUfFaceType extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationUfUnrollTrack extends AttribMixOrganization { constructor() { super() } }
+class AttribMixOrganizationUnfoldInfo extends AttribMixOrganization { constructor() { super() } }
+class AttribNamingMatching extends Attrib { constructor() { super() } }
+class AttribNamingMatchingNMxBrepTag extends AttribNamingMatching { constructor() { super() } }
+class AttribNamingMatchingNMxBrepTagFeature extends AttribNamingMatchingNMxBrepTag { constructor() { super() } }
+class AttribNamingMatchingNMxBrepTagName extends AttribNamingMatchingNMxBrepTag { constructor() { super() } }
+// ... many more naming matching subtypes
+class AttribRBase extends Attrib { constructor() { super() } }
+class AttribRBaseRender extends AttribRBase { constructor() { super() } }
+class AttribRfBase extends Attrib { constructor() { super() } }
+class AttribRfBaseFaceTracker extends AttribRfBase { constructor() { super() } }
+class AttribSg extends Attrib { constructor() { super() } }
+class AttribSgPidName extends AttribSg { constructor() { super() } }
+class AttribSnl extends Attrib { constructor() { super() } }
+class AttribSnlCubitOwner extends AttribSnl { constructor() { super() } }
+class AttribCt extends Attrib { constructor() { super() } }
+class AttribCtCellPtr extends AttribCt { constructor() { super() } }
+class AttribCtCFace extends AttribCt { constructor() { super() } }
+
+// ============================================================================
+// Utility: Extract color from entity's attribute chain
+// ============================================================================
+
+/**
+ * Walk attribute chain and find color
+ */
+function extractColor(entity) {
+  if (!entity || !entity._attrib) return null
+
+  let attr = entity._attrib.entity
+  const visited = new Set()
+
+  while (attr && !visited.has(attr.index)) {
+    visited.add(attr.index)
+
+    if (attr instanceof AttribStRgbColor ||
+        attr instanceof AttribTslColour ||
+        attr instanceof AttribADeskTrueColor) {
+      return attr.getColor()
+    }
+
+    attr = attr.getNext()
+  }
+
+  return null
+}
+
+/**
+ * Walk attribute chain and find name
+ */
+function extractName(entity) {
+  if (!entity || !entity._attrib) return null
+
+  let attr = entity._attrib.entity
+  const visited = new Set()
+
+  while (attr && !visited.has(attr.index)) {
+    visited.add(attr.index)
+
+    if (attr instanceof AttribGenName) {
+      return attr.getName()
+    }
+
+    attr = attr.getNext()
+  }
+
+  return null
+}
+
+  // ============================================================================
+  // curves.js
+  // ============================================================================
 
 /**
  * ACIS Curve Classes
  * Curve geometry classes: Straight, Ellipse, IntCurve, etc.
  * Ported from Acis.py lines 2063-2700
  */
-
-
 
 // ============================================================================
 // Base Geometry Class
@@ -4490,9 +4118,9 @@ const CURVE_TYPES = {
   'taper_silh_int_cur': ['setSilhouetteTaper', 1, true]
 }
 
-// ============================================================================
-// surfaces.js
-// ============================================================================
+  // ============================================================================
+  // surfaces.js
+  // ============================================================================
 
 /**
  * ACIS Surface Classes
@@ -4503,29 +4131,6 @@ const CURVE_TYPES = {
 
 
 
-// Forward declarations for circular dependency resolution
-let _readCurveFn, _readSurfaceFn, _readLawFn
-
-/**
- * Set curve reader function (called from index.js to resolve circular dependency)
- */
-function setCurveReader(fn) {
-  _readCurveFn = fn
-}
-
-/**
- * Set surface reader function (called from index.js to resolve circular dependency)
- */
-function setSurfaceReader(fn) {
-  _readSurfaceFn = fn
-}
-
-/**
- * Set law reader function (called from index.js to resolve circular dependency)
- */
-function setLawReader(fn) {
-  _readLawFn = fn
-}
 
 // ============================================================================
 // Base Surface Class
@@ -4890,7 +4495,7 @@ class SurfaceSpline extends Surface {
     // Read loft profile curve data
     let i = index
     let curve
-    ;[curve, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[curve, i] = readCurve ? readCurve(chunks, i) : [null, i]
     return [curve, i]
   }
 
@@ -4898,7 +4503,7 @@ class SurfaceSpline extends Surface {
     // Read loft path curve data
     let i = index
     let curve
-    ;[curve, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[curve, i] = readCurve ? readCurve(chunks, i) : [null, i]
     return [curve, i]
   }
 
@@ -4925,7 +4530,7 @@ class SurfaceSpline extends Surface {
     const data = new LoftData()
     let i = index
 
-    ;[data.surface, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+    ;[data.surface, i] = readSurface ? readSurface(chunks, i) : [null, i]
     ;[data.bs2cur, i] = readBS2Curve(chunks, i)
     ;[data.e1, i] = getBoolean(chunks, i)
     ;[data.type, i] = getInteger(chunks, i)
@@ -4947,8 +4552,8 @@ class SurfaceSpline extends Surface {
     let name, surface, curve, bs, v
 
     ;[name, i] = getText(chunks, i)
-    ;[surface, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
-    ;[curve, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[surface, i] = readSurface ? readSurface(chunks, i) : [null, i]
+    ;[curve, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[bs, i] = readBS2Curve(chunks, i)
     ;[v, i] = getLocation(chunks, i)
 
@@ -4966,8 +4571,8 @@ class SurfaceSpline extends Surface {
     let name, surface, curve, bs, v
 
     ;[name, i] = getText(chunks, i)
-    ;[surface, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
-    ;[curve, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[surface, i] = readSurface ? readSurface(chunks, i) : [null, i]
+    ;[curve, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[bs, i] = readBS2Curve(chunks, i)
     ;[v, i] = getLocation(chunks, i)
 
@@ -4985,8 +4590,8 @@ class SurfaceSpline extends Surface {
     let txt, srf, cur, bs2, vec
 
     ;[txt, i] = getText(chunks, i)
-    ;[srf, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
-    ;[cur, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[srf, i] = readSurface ? readSurface(chunks, i) : [null, i]
+    ;[cur, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[bs2, i] = readBS2Curve(chunks, i)
     ;[vec, i] = getVector(chunks, i)
 
@@ -5014,7 +4619,7 @@ class SurfaceSpline extends Surface {
     for (let k = 0; k < n; k++) {
       let nk, ck, lk
       ;[nk, i] = getInteger(chunks, i)
-      ;[ck, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+      ;[ck, i] = readCurve ? readCurve(chunks, i) : [null, i]
       ;[lk, i] = this._readLoftData(chunks, i)
       lofts.push([nk, ck, lk])
     }
@@ -5025,7 +4630,7 @@ class SurfaceSpline extends Surface {
     }
 
     let cur, bs3, arr
-    ;[cur, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[cur, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[n, i] = getInteger(chunks, i)
 
     bs3 = []
@@ -5055,29 +4660,29 @@ class SurfaceSpline extends Surface {
         for (let k = 0; k < n; k++) {
           i += 1
           let curve, loftdata
-          ;[curve, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+          ;[curve, i] = readCurve ? readCurve(chunks, i) : [null, i]
           ;[loftdata, i] = this._readLoftData(chunks, i)
           skin.loft.push([curve, loftdata])
         }
-        ;[skin.cur2, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+        ;[skin.cur2, i] = readCurve ? readCurve(chunks, i) : [null, i]
         i += 2 // 0, -1
       } else {
-        ;[skin.cur, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+        ;[skin.cur, i] = readCurve ? readCurve(chunks, i) : [null, i]
         ;[skin.loft, i] = readLofSubdata(chunks, i)
         i += 1
-        ;[skin.cur2, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+        ;[skin.cur2, i] = readCurve ? readCurve(chunks, i) : [null, i]
         i += 1
       }
       ;[skin.vec, i] = getVector(chunks, i)
     } else {
-      ;[skin.cur, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+      ;[skin.cur, i] = readCurve ? readCurve(chunks, i) : [null, i]
       ;[skin.vec, i] = getVector(chunks, i)
-      ;[skin.surf, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+      ;[skin.surf, i] = readSurface ? readSurface(chunks, i) : [null, i]
     }
 
     ;[skin.f2, i] = getFloat(chunks, i)
     ;[skin.law, i] = readFormula(chunks, i)
-    ;[skin.pcur, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[skin.pcur, i] = readCurve ? readCurve(chunks, i) : [null, i]
 
     return [skin, i]
   }
@@ -5101,7 +4706,7 @@ class SurfaceSpline extends Surface {
     ;[vbl.fullness, i] = getFloat(chunks, i)
 
     if (svId === 'circle') {
-      ;[vbl.curve, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+      ;[vbl.curve, i] = readCurve ? readCurve(chunks, i) : [null, i]
       let subType
       ;[subType, i] = getEnumByValue(chunks, i, VBL_CIRCLE)
 
@@ -5125,14 +4730,14 @@ class SurfaceSpline extends Surface {
       ;[vbl.normal1, i] = getVector(chunks, i)
       ;[vbl.normal2, i] = getVector(chunks, i)
     } else if (svId === 'pcurve') {
-      ;[vbl.surface, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+      ;[vbl.surface, i] = readSurface ? readSurface(chunks, i) : [null, i]
       ;[vbl.pcurve, i] = readBS2Curve(chunks, i)
       ;[vbl.sense, i] = getEnumByTag(chunks, i, SENSE)
       ;[vbl.fittolerance, i] = getFloats(chunks, i, 1)
     } else if (svId === 'plane') {
       ;[vbl.normal, i] = getVector(chunks, i)
       ;[vbl.parameters, i] = getFloats(chunks, i, 2)
-      ;[vbl.curve, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+      ;[vbl.curve, i] = readCurve ? readCurve(chunks, i) : [null, i]
     }
 
     return [vbl, i]
@@ -5178,7 +4783,7 @@ class SurfaceSpline extends Surface {
 
   setRotation(chunks, index, inventor) {
     let i = index
-    ;[this.profile, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[this.profile, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[this.loc, i] = getLocation(chunks, i)
     ;[this.dir, i] = getVector(chunks, i)
     i = this.setSurfaceShape(chunks, i, inventor, 'rot_spl_sur')
@@ -5187,15 +4792,15 @@ class SurfaceSpline extends Surface {
 
   setRule(chunks, index, inventor) {
     let i = index
-    ;[this.profile1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-    ;[this.profile2, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[this.profile1, i] = readCurve ? readCurve(chunks, i) : [null, i]
+    ;[this.profile2, i] = readCurve ? readCurve(chunks, i) : [null, i]
     i = this.setSurfaceShape(chunks, i, inventor, 'rule_sur')
     return i
   }
 
   setCylinder(chunks, index, inventor) {
     let i = index
-    ;[this.profile, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[this.profile, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[this.axis, i] = getVector(chunks, i)
     ;[this.center, i] = getLocation(chunks, i)
     i = this.setSurfaceShape(chunks, i, inventor, 'cyl_spl_sur')
@@ -5219,8 +4824,8 @@ class SurfaceSpline extends Surface {
 
   setSum(chunks, index, inventor) {
     let i = index
-    ;[this.curve1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-    ;[this.curve2, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[this.curve1, i] = readCurve ? readCurve(chunks, i) : [null, i]
+    ;[this.curve2, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[this.origin, i] = getLocation(chunks, i)
     i = this.setSurfaceShape(chunks, i, inventor, 'sum_spl_sur')
     return i
@@ -5238,7 +4843,7 @@ class SurfaceSpline extends Surface {
 
   setOffset(chunks, index, inventor) {
     let i = index
-    ;[this.surface, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+    ;[this.surface, i] = readSurface ? readSurface(chunks, i) : [null, i]
     ;[this.offset, i] = getFloat(chunks, i)
     ;[this.senseU, i] = getEnumByTag(chunks, i, SENSE)
     ;[this.senseV, i] = getEnumByTag(chunks, i, SENSE)
@@ -5340,7 +4945,7 @@ class SurfaceSpline extends Surface {
     this.compounds = []
     for (let k = 0; k < d.length; k++) {
       let f
-      ;[f, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+      ;[f, i] = readSurface ? readSurface(chunks, i) : [null, i]
       this.compounds.push(f)
     }
     return i
@@ -5478,13 +5083,13 @@ class SurfaceSpline extends Surface {
       i += 2 // 43, 1e-10
     }
 
-    ;[this.slice, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[this.slice, i] = readCurve ? readCurve(chunks, i) : [null, i]
 
     if (vrs > 22.0 && !isASM()) {
-      ;[this.cT1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-      ;[this.cT2, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-      ;[this.cT3, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-      ;[this.cT4, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+      ;[this.cT1, i] = readCurve ? readCurve(chunks, i) : [null, i]
+      ;[this.cT2, i] = readCurve ? readCurve(chunks, i) : [null, i]
+      ;[this.cT3, i] = readCurve ? readCurve(chunks, i) : [null, i]
+      ;[this.cT4, i] = readCurve ? readCurve(chunks, i) : [null, i]
     }
 
     ;[this.offset_left, i] = getLength(chunks, i)
@@ -5538,8 +5143,8 @@ class SurfaceSpline extends Surface {
     }
 
     let s11, c11, p11, v11, p12
-    ;[s11, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
-    ;[c11, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[s11, i] = readSurface ? readSurface(chunks, i) : [null, i]
+    ;[c11, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[p11, i] = readBS2Curve(chunks, i)
     ;[v11, i] = getVector(chunks, i)
     ;[p12, i] = readBS2Curve(chunks, i)
@@ -5568,15 +5173,15 @@ class SurfaceSpline extends Surface {
 
     let t21, s21, c21, p21, v21, p22, s22, tol21
     ;[t21, i] = getValue(chunks, i)
-    ;[s21, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
-    ;[c21, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[s21, i] = readSurface ? readSurface(chunks, i) : [null, i]
+    ;[c21, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[p21, i] = readBS2Curve(chunks, i)
     ;[v21, i] = getVector(chunks, i)
     ;[p22, i] = readBS2Curve(chunks, i)
     ;[s22, tol21, i] = readSplineSurface(chunks, i, true)
 
     let c1, a1, l1, rU, rV
-    ;[c1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[c1, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[a1, i] = getFloats(chunks, i, 2)
     ;[l1, i] = getLong(chunks, i)
     ;[rU, i] = getInterval(chunks, i, MIN_INF, MAX_INF, 1.0)
@@ -5599,7 +5204,7 @@ class SurfaceSpline extends Surface {
   setDefm(chunks, index, inventor) {
     let i = index
 
-    ;[this.surface, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+    ;[this.surface, i] = readSurface ? readSurface(chunks, i) : [null, i]
 
     let t1
     ;[t1, i] = getInteger(chunks, i)
@@ -5672,7 +5277,7 @@ class SurfaceSpline extends Surface {
       ;[t3, i] = getInteger(chunks, i)
       ;[v31, i] = getFloat(chunks, i)
     } else if (t1 === 5) {
-      ;[this.surface, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+      ;[this.surface, i] = readSurface ? readSurface(chunks, i) : [null, i]
 
       let i32, e31, f32, i33, f34
       ;[i32, i] = getLong(chunks, i)
@@ -5714,7 +5319,7 @@ class SurfaceSpline extends Surface {
       ;[t2, i] = getInteger(chunks, i)
 
       let srf, v15, b4
-      ;[srf, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+      ;[srf, i] = readSurface ? readSurface(chunks, i) : [null, i]
       ;[v15, i] = getLong(chunks, i)
       ;[b4, i] = getBoolean(chunks, i)
 
@@ -5782,7 +5387,7 @@ class SurfaceSpline extends Surface {
     if (chunk && [TAG_LONG, TAG_FLOAT, TAG_DOUBLE].includes(chunk.tag)) {
       let n
       ;[n, i] = getInteger(chunks, i)
-      ;[this.profile, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+      ;[this.profile, i] = readCurve ? readCurve(chunks, i) : [null, i]
       ;[this.prof_rng, i] = getInterval(chunks, i, MIN_INF, MAX_INF, 1.0)
 
       let b1
@@ -5805,7 +5410,7 @@ class SurfaceSpline extends Surface {
         let n2, bln2
         ;[n2, i] = getInteger(chunks, i)
         ;[bln2, i] = getBoolean(chunks, i)
-        ;[this.path, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+        ;[this.path, i] = readCurve ? readCurve(chunks, i) : [null, i]
 
         let rng2, flt2
         ;[rng2, i] = getInterval(chunks, i, MIN_INF, MAX_INF, getScale())
@@ -5820,7 +5425,7 @@ class SurfaceSpline extends Surface {
           let bln3, bln4, c1, rng3, num3, num4, flt3, bln5, bln6, bln7
           ;[bln3, i] = getBoolean(chunks, i)
           ;[bln4, i] = getBoolean(chunks, i)
-          ;[c1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+          ;[c1, i] = readCurve ? readCurve(chunks, i) : [null, i]
           ;[rng3, i] = getInterval(chunks, i, MIN_INF, MAX_INF, 1.0)
           ;[num3, i] = getInteger(chunks, i)
           ;[num4, i] = getInteger(chunks, i)
@@ -5831,10 +5436,10 @@ class SurfaceSpline extends Surface {
         } else if (n2 === 3) {
           let sng1, srf1, bln4, crv1, bln6, bln7
           ;[sng1, i] = getSingularity(chunks, i)
-          ;[srf1, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
+          ;[srf1, i] = readSurface ? readSurface(chunks, i) : [null, i]
           ;[bln4, i] = getBoolean(chunks, i)
           if (bln4) {
-            ;[crv1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+            ;[crv1, i] = readCurve ? readCurve(chunks, i) : [null, i]
           }
           ;[bln6, i] = getBoolean(chunks, i)
           if (getAsmMajor() < 219) {
@@ -5843,24 +5448,24 @@ class SurfaceSpline extends Surface {
         }
       } else {
         let l1, n1, r1, v1, n2, b1, c1, r2, x1, b2, l2, n3, f1, b3
-        ;[l1, i] = _readLawFn ? _readLawFn(chunks, i) : [null, i]
+        ;[l1, i] = readLaw ? readLaw(chunks, i) : [null, i]
         ;[n1, i] = getInteger(chunks, i)
         ;[r1, i] = getInterval(chunks, i, MIN_INF, MAX_INF, 1.0)
         ;[v1, i] = getVector(chunks, i)
         ;[n2, i] = getInteger(chunks, i)
         ;[b1, i] = getBoolean(chunks, i)
-        ;[c1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+        ;[c1, i] = readCurve ? readCurve(chunks, i) : [null, i]
         ;[r2, i] = getInterval(chunks, i, MIN_INF, MAX_INF, 1.0)
         ;[x1, i] = getFloat(chunks, i)
         ;[b2, i] = getBoolean(chunks, i)
-        ;[l2, i] = _readLawFn ? _readLawFn(chunks, i) : [null, i]
+        ;[l2, i] = readLaw ? readLaw(chunks, i) : [null, i]
         ;[n3, i] = getInteger(chunks, i)
         ;[f1, i] = readFormula(chunks, i)
         ;[b3, i] = getBoolean(chunks, i)
       }
     } else {
-      ;[this.profile, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-      ;[this.path, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+      ;[this.profile, i] = readCurve ? readCurve(chunks, i) : [null, i]
+      ;[this.path, i] = readCurve ? readCurve(chunks, i) : [null, i]
       ;[this.s2, i] = getEnumByTag(chunks, i, SURF_SWEEP)
       ;[this.v1, i] = getVector(chunks, i)
 
@@ -5902,8 +5507,8 @@ class SurfaceSpline extends Surface {
 
   setTaper(chunks, index, inventor, subtype = 'taper_spl_sur') {
     let i = index
-    ;[this.surface, i] = _readSurfaceFn ? _readSurfaceFn(chunks, i) : [null, i]
-    ;[this.curve, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[this.surface, i] = readSurface ? readSurface(chunks, i) : [null, i]
+    ;[this.curve, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[this.pcurve, i] = readBS2Curve(chunks, i)
 
     let f1
@@ -5955,14 +5560,14 @@ class SurfaceSpline extends Surface {
     }
 
     let cur1
-    ;[cur1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[cur1, i] = readCurve ? readCurve(chunks, i) : [null, i]
 
     if (vrs > 22.0 && !isASM()) {
       let curT1, curT2, curT3, curT4
-      ;[curT1, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-      ;[curT2, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-      ;[curT3, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
-      ;[curT4, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+      ;[curT1, i] = readCurve ? readCurve(chunks, i) : [null, i]
+      ;[curT2, i] = readCurve ? readCurve(chunks, i) : [null, i]
+      ;[curT3, i] = readCurve ? readCurve(chunks, i) : [null, i]
+      ;[curT4, i] = readCurve ? readCurve(chunks, i) : [null, i]
     }
 
     let off
@@ -6032,7 +5637,7 @@ class SurfaceSpline extends Surface {
     }
 
     let cur2, c, rb
-    ;[cur2, i] = _readCurveFn ? _readCurveFn(chunks, i) : [null, i]
+    ;[cur2, i] = readCurve ? readCurve(chunks, i) : [null, i]
     ;[c, i] = getEnumByTag(chunks, i, CONVEXITY)
 
     if (vrs > 3.0) {
@@ -6381,38 +5986,479 @@ const SURFACE_TYPES = {
   'swept_tpr_spl_sur': ['setSweptTaper', 1, true]
 }
 
+  // ============================================================================
+  // topology.js
+  // ============================================================================
+
+/**
+ * ACIS Topology Classes
+ * Topology entities: Body, Lump, Shell, Face, Loop, Wire, CoEdge, Edge, Vertex
+ * Ported from Acis.py lines 1628-2060
+ */
+
 // ============================================================================
-// attributes.js
+// Base Topology Class
 // ============================================================================
 
 /**
- * ACIS Attribute Classes
- * Attribute entities for colors, names, and metadata
- * Ported from Acis.py lines 4133-4700
+ * Base class for topology entities
+ * Based on Acis.py Topology class and _handle_topology_DEFAULT function
  */
+class Topology extends Entity {
+  constructor() {
+    super()
+  }
 
+  set(record) {
+    let i = super.set(record)
 
+    // _handle_topology_DEFAULT logic from Acis.py lines 187-192
+    const vrs = getVersion()
+    // Skip extra field for non-ASM format when version > 10.0
+    if (vrs > 10.0 && !isASM()) {
+      i++
+    }
+    // Skip another field for version > 6.0
+    if (vrs > 6.0) {
+      i++
+    }
+
+    return i
+  }
+}
 
 // ============================================================================
-// Base Attributes Class
+// Body Entity
 // ============================================================================
 
 /**
- * Base class for attribute entities
+ * Body entity - top-level container for lumps
  */
-class Attributes extends Entity {
+class Body extends Topology {
+  constructor() {
+    super()
+    this._lump = null       // First lump
+    this._wire = null       // First wire
+    this._transform = null  // Transform reference
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this._lump, i] = getRefNode(record, i, 'lump')
+    ;[this._wire, i] = getRefNode(record, i, 'wire')
+    ;[this._transform, i] = getRefNode(record, i, 'transform')
+    return i
+  }
+
+  getLump() {
+    return this._lump ? this._lump.entity : null
+  }
+
+  getWire() {
+    return this._wire ? this._wire.entity : null
+  }
+
+  getTransform() {
+    return this._transform ? this._transform.entity : null
+  }
+
+  /**
+   * Get all lumps in this body
+   */
+  getLumps() {
+    const lumps = []
+    let lump = this.getLump()
+    while (lump) {
+      lumps.push(lump)
+      lump = lump.getNext()
+    }
+    return lumps
+  }
+
+  /**
+   * Get all wires in this body
+   */
+  getWires() {
+    const wires = []
+    let wire = this.getWire()
+    while (wire) {
+      wires.push(wire)
+      wire = wire.getNext()
+    }
+    return wires
+  }
+
+  build() {
+    if (this._readyToBuild) {
+      this._readyToBuild = false
+      // Build logic would go here with OpenCascade
+    }
+    return this.shape
+  }
+}
+
+// ============================================================================
+// Lump Entity
+// ============================================================================
+
+/**
+ * Lump entity - container for shells
+ */
+class Lump extends Topology {
+  constructor() {
+    super()
+    this._next = null   // Next lump in body
+    this._shell = null  // First shell
+    this._owner = null  // Owning body
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this._next, i] = getRefNode(record, i, 'lump')
+    ;[this._shell, i] = getRefNode(record, i, 'shell')
+    ;[this._owner, i] = getRefNode(record, i, 'body')
+    return i
+  }
+
+  getNext() {
+    return this._next ? this._next.entity : null
+  }
+
+  getShell() {
+    return this._shell ? this._shell.entity : null
+  }
+
+  getParent() {
+    return this._owner ? this._owner.entity : null
+  }
+
+  /**
+   * Get all shells in this lump
+   */
+  getShells() {
+    const shells = []
+    let shell = this.getShell()
+    while (shell) {
+      shells.push(shell)
+      shell = shell.getNext()
+    }
+    return shells
+  }
+
+  build() {
+    if (this._readyToBuild) {
+      this._readyToBuild = false
+      // Build logic
+    }
+    return this.shape
+  }
+}
+
+// ============================================================================
+// Shell Entity
+// ============================================================================
+
+/**
+ * Shell entity - container for faces
+ */
+class Shell extends Topology {
+  constructor() {
+    super()
+    this._next = null     // Next shell in lump
+    this._subshell = null // First subshell
+    this._face = null     // First face
+    this._wire = null     // First wire
+    this._owner = null    // Owning lump
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this._next, i] = getRefNode(record, i, 'shell')
+    ;[this._subshell, i] = getRefNode(record, i, 'subshell')
+    ;[this._face, i] = getRefNode(record, i, 'face')
+    ;[this._wire, i] = getRefNode(record, i, 'wire')
+    ;[this._owner, i] = getRefNode(record, i, 'lump')
+    return i
+  }
+
+  getNext() {
+    return this._next ? this._next.entity : null
+  }
+
+  getFace() {
+    return this._face ? this._face.entity : null
+  }
+
+  getParent() {
+    return this._owner ? this._owner.entity : null
+  }
+
+  /**
+   * Get all faces in this shell
+   */
+  getFaces() {
+    const faces = []
+    let face = this.getFace()
+    const visited = new Set()
+    while (face && !visited.has(face.index)) {
+      visited.add(face.index)
+      faces.push(face)
+      face = face.getNext()
+    }
+    return faces
+  }
+
+  build() {
+    if (this._readyToBuild) {
+      this._readyToBuild = false
+      // Build logic
+    }
+    return this.shape
+  }
+}
+
+// ============================================================================
+// SubShell Entity
+// ============================================================================
+
+/**
+ * SubShell entity
+ */
+class SubShell extends Topology {
   constructor() {
     super()
     this._next = null
-    this._previous = null
+    this._child = null
+    this._face = null
+    this._wire = null
     this._owner = null
   }
 
   set(record) {
     let i = super.set(record)
-    ;[this._next, i] = getRefNode(record, i, 'attrib')
-    ;[this._previous, i] = getRefNode(record, i, 'attrib')
+    ;[this._next, i] = getRefNode(record, i, 'subshell')
+    ;[this._child, i] = getRefNode(record, i, 'subshell')
+    ;[this._face, i] = getRefNode(record, i, 'face')
+    ;[this._wire, i] = getRefNode(record, i, 'wire')
     ;[this._owner, i] = getRefNode(record, i, null)
+    return i
+  }
+}
+
+// ============================================================================
+// Face Entity
+// ============================================================================
+
+/**
+ * Face entity - container for loops with a surface
+ */
+class Face extends Topology {
+  constructor() {
+    super()
+    this._next = null     // Next face in shell
+    this._loop = null     // First loop
+    this._shell = null    // Owning shell
+    this._subshell = null // Owning subshell
+    this._surface = null  // Surface geometry
+    this.sense = 'forward'
+    this.sides = 'single'
+    this.side = null
+    this.containment = null
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this._next, i] = getRefNode(record, i, 'face')
+    ;[this._loop, i] = getRefNode(record, i, 'loop')
+    ;[this._shell, i] = getRefNode(record, i, 'shell')
+    ;[this._subshell, i] = getRefNode(record, i, 'subshell')
+    ;[this._surface, i] = getRefNode(record, i, 'surface')
+    ;[this.sense, i] = getEnumByTag(record.chunks, i, SENSE)
+
+    // Handle sides
+    const [sides, i2] = getEnumByTag(record.chunks, i, SIDES)
+    this.sides = sides
+    i = i2
+    if (sides === 'double') {
+      ;[this.side, i] = getEnumByTag(record.chunks, i, SIDE)
+    }
+
+    // Version-specific containment
+    if (getVersion() > 5.0) {
+      ;[this.containment, i] = getEnumByTag(record.chunks, i, { 0: 'unset', 1: 'set' })
+    }
+
+    return i
+  }
+
+  getNext() {
+    return this._next ? this._next.entity : null
+  }
+
+  getLoop() {
+    return this._loop ? this._loop.entity : null
+  }
+
+  getSurface() {
+    return this._surface ? this._surface.entity : null
+  }
+
+  getParent() {
+    return this._shell ? this._shell.entity : null
+  }
+
+  /**
+   * Get all loops in this face
+   */
+  getLoops() {
+    const loops = []
+    let loop = this.getLoop()
+    const visited = new Set()
+    while (loop && !visited.has(loop.index)) {
+      visited.add(loop.index)
+      loops.push(loop)
+      loop = loop.getNext()
+    }
+    return loops
+  }
+
+  build() {
+    if (this._readyToBuild) {
+      this._readyToBuild = false
+      // Build logic
+    }
+    return this.shape
+  }
+}
+
+// ============================================================================
+// Loop Entity
+// ============================================================================
+
+/**
+ * Loop entity - container for coedges
+ */
+class Loop extends Topology {
+  constructor() {
+    super()
+    this._next = null    // Next loop in face
+    this._coedge = null  // First coedge
+    this._face = null    // Owning face
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this._next, i] = getRefNode(record, i, 'loop')
+    ;[this._coedge, i] = getRefNode(record, i, 'coedge')
+    ;[this._face, i] = getRefNode(record, i, 'face')
+    return i
+  }
+
+  getNext() {
+    return this._next ? this._next.entity : null
+  }
+
+  getCoedge() {
+    return this._coedge ? this._coedge.entity : null
+  }
+
+  getParent() {
+    return this._face ? this._face.entity : null
+  }
+
+  /**
+   * Get all coedges in this loop
+   */
+  getCoedges() {
+    const coedges = []
+    let coedge = this.getCoedge()
+    const visited = new Set()
+    while (coedge && !visited.has(coedge.index)) {
+      visited.add(coedge.index)
+      coedges.push(coedge)
+      coedge = coedge.getNext()
+    }
+    return coedges
+  }
+
+  build() {
+    if (this._readyToBuild) {
+      this._readyToBuild = false
+      // Build logic
+    }
+    return this.shape
+  }
+}
+
+// ============================================================================
+// Wire Entity
+// ============================================================================
+
+/**
+ * Wire entity - standalone edge container
+ */
+class Wire extends Topology {
+  constructor() {
+    super()
+    this._next = null
+    this._coedge = null
+    this._owner = null  // Shell or body
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this._next, i] = getRefNode(record, i, 'wire')
+    ;[this._coedge, i] = getRefNode(record, i, 'coedge')
+    ;[this._owner, i] = getRefNode(record, i, null)
+    return i
+  }
+
+  getNext() {
+    return this._next ? this._next.entity : null
+  }
+
+  getCoedge() {
+    return this._coedge ? this._coedge.entity : null
+  }
+
+  getParent() {
+    return this._owner ? this._owner.entity : null
+  }
+}
+
+// ============================================================================
+// CoEdge Entity
+// ============================================================================
+
+/**
+ * CoEdge entity - edge with direction/sense in a loop
+ */
+class CoEdge extends Topology {
+  constructor() {
+    super()
+    this._next = null      // Next coedge in loop
+    this._previous = null  // Previous coedge in loop
+    this._partner = null   // Partner coedge (shared edge)
+    this._edge = null      // Edge geometry
+    this._owner = null     // Owning loop or wire
+    this._pcurve = null    // Parameter curve on surface
+    this.sense = 'forward'
+  }
+
+  set(record) {
+    let i = super.set(record)
+    ;[this._next, i] = getRefNode(record, i, 'coedge')
+    ;[this._previous, i] = getRefNode(record, i, 'coedge')
+    ;[this._partner, i] = getRefNode(record, i, 'coedge')
+    ;[this._edge, i] = getRefNode(record, i, 'edge')
+    ;[this.sense, i] = getEnumByTag(record.chunks, i, SENSE)
+    ;[this._owner, i] = getRefNode(record, i, null) // loop or wire
+
+    // Optional pcurve
+    if (i < record.chunks.length && record.chunks[i].tag === TAG_ENTITY_REF) {
+      ;[this._pcurve, i] = getRefNode(record, i, 'pcurve')
+    }
+
     return i
   }
 
@@ -6424,957 +6470,262 @@ class Attributes extends Entity {
     return this._previous ? this._previous.entity : null
   }
 
-  getOwner() {
+  getPartner() {
+    return this._partner ? this._partner.entity : null
+  }
+
+  getEdge() {
+    return this._edge ? this._edge.entity : null
+  }
+
+  getParent() {
     return this._owner ? this._owner.entity : null
   }
-}
 
-// ============================================================================
-// Attrib Base
-// ============================================================================
-
-class Attrib extends Attributes {
-  constructor() {
-    super()
-  }
-}
-
-// ============================================================================
-// ADesk (AutoDesk) Attributes
-// ============================================================================
-
-class AttribADesk extends Attrib {
-  constructor() {
-    super()
-  }
-}
-
-class AttribADeskColor extends AttribADesk {
-  constructor() {
-    super()
-    this.colorIndex = 0
+  getPcurve() {
+    return this._pcurve ? this._pcurve.entity : null
   }
 
-  set(record) {
-    let i = super.set(record)
-    ;[this.colorIndex, i] = getInteger(record.chunks, i)
-    return i
-  }
-}
-
-class AttribADeskMaterial extends AttribADesk {
-  constructor() {
-    super()
-    this.val1 = 0
-    this.val2 = 0
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this.val1, i] = getInteger(record.chunks, i)
-    ;[this.val2, i] = getInteger(record.chunks, i)
-    return i
-  }
-}
-
-class AttribADeskTrueColor extends AttribADesk {
-  constructor() {
-    super()
-    this.alpha = 0.0
-    this.red = 0.749
-    this.green = 0.749
-    this.blue = 0.749
-  }
-
-  set(record) {
-    let i = super.set(record)
-    const [rgba, i2] = getInteger(record.chunks, i)
-    this.alpha = ((rgba >> 24) & 0xFF) / 255.0
-    this.red = ((rgba >> 16) & 0xFF) / 255.0
-    this.green = ((rgba >> 8) & 0xFF) / 255.0
-    this.blue = (rgba & 0xFF) / 255.0
-    return i2
-  }
-
-  getColor() {
-    return { r: this.red, g: this.green, b: this.blue, a: this.alpha }
-  }
-}
-
-// ============================================================================
-// Ansoft Attributes
-// ============================================================================
-
-class AttribAnsoft extends Attrib {
-  constructor() {
-    super()
-  }
-}
-
-class AttribAnsoftId extends AttribAnsoft {
-  constructor() {
-    super()
-  }
-}
-
-class AttribAnsoftProperties extends AttribAnsoft {
-  constructor() {
-    super()
-  }
-}
-
-// ============================================================================
-// BT Attributes
-// ============================================================================
-
-class AttribBt extends Attrib {
-  constructor() {
-    super()
-  }
-}
-
-class AttribBtEntityColor extends AttribBt {
-  constructor() {
-    super()
-  }
-}
-
-// ============================================================================
-// Gen (Generic) Attributes
-// ============================================================================
-
-class AttribGen extends Attrib {
-  constructor() {
-    super()
-  }
-}
-
-class AttribGenName extends AttribGen {
-  constructor() {
-    super()
-    this.text = ''
-  }
-
-  set(record) {
-    let i = super.set(record)
-    const vers = getVersion()
-    if (vers > 1.7) {
-      if (vers < 16.0 || isASM()) {
-        i += 4 // Skip [(keep|copy), (keep_keep), (ignore), (copy)]
+  build() {
+    if (this._readyToBuild) {
+      this._readyToBuild = false
+      const edge = this.getEdge()
+      if (edge) {
+        this.shape = edge.build()
+        if (this.shape && this.sense === 'reversed') {
+          // Reverse the shape
+        }
       }
-      ;[this.text, i] = getText(record.chunks, i)
     }
-    return i
-  }
-
-  getName() {
-    return this.text
+    return this.shape
   }
 }
 
-class AttribGenNameInt32 extends AttribGenName {
+/**
+ * Tolerant CoEdge
+ */
+class CoEdgeTolerance extends CoEdge {
   constructor() {
     super()
-    this.value = 0
+    this.tolerance = 0.0
   }
 
   set(record) {
     let i = super.set(record)
-    ;[this.value, i] = getInteger(record.chunks, i)
+    ;[this.tolerance, i] = getFloat(record.chunks, i)
     return i
   }
 }
 
-class AttribGenNameInt64 extends AttribGenName {
-  constructor() {
-    super()
-    this.value = 0
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this.value, i] = getInteger(record.chunks, i)
-    return i
-  }
-}
-
-class AttribGenNameString extends AttribGenName {
-  constructor() {
-    super()
-    this.value = ''
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this.value, i] = getText(record.chunks, i)
-    return i
-  }
-}
-
-class AttribGenNameReal extends AttribGenName {
-  constructor() {
-    super()
-    this.value = 0.0
-  }
-
-  set(record) {
-    let i = super.set(record)
-    ;[this.value, i] = getFloat(record.chunks, i)
-    return i
-  }
-}
-
-class AttribGenNameVector extends AttribGenName {
-  constructor() {
-    super()
-    this.value = { x: 0, y: 0, z: 0 }
-  }
-
-  set(record) {
-    let i = super.set(record)
-    const [x, i2] = getFloat(record.chunks, i)
-    const [y, i3] = getFloat(record.chunks, i2)
-    const [z, i4] = getFloat(record.chunks, i3)
-    this.value = { x, y, z }
-    return i4
-  }
-}
-
 // ============================================================================
-// ST (Standard) Attributes
+// Edge Entity
 // ============================================================================
 
-class AttribSt extends Attrib {
+/**
+ * Edge entity - curve between two vertices
+ */
+class Edge extends Topology {
   constructor() {
     super()
-  }
-}
-
-class AttribStNoMerge extends AttribSt {
-  constructor() {
-    super()
-  }
-}
-
-class AttribStNoCombine extends AttribSt {
-  constructor() {
-    super()
-  }
-}
-
-class AttribStRgbColor extends AttribSt {
-  constructor() {
-    super()
-    this.red = 0.749
-    this.green = 0.749
-    this.blue = 0.749
+    this._start = null   // Start vertex
+    this._end = null     // End vertex
+    this._owner = null   // Owning coedge
+    this._curve = null   // Curve geometry
+    this.sense = 'forward'
   }
 
   set(record) {
     let i = super.set(record)
-    ;[this.red, i] = getFloat(record.chunks, i)
-    ;[this.green, i] = getFloat(record.chunks, i)
-    ;[this.blue, i] = getFloat(record.chunks, i)
+    ;[this._start, i] = getRefNode(record, i, 'vertex')
+
+    // Read start parameter (float after start vertex)
+    if (i < record.chunks.length && record.chunks[i] &&
+        (record.chunks[i].tag === 0x06 || record.chunks[i].tag === 0x05)) {
+      ;[this.parameter1, i] = getFloat(record.chunks, i)
+    }
+
+    ;[this._end, i] = getRefNode(record, i, 'vertex')
+
+    // Read end parameter (float after end vertex)
+    if (i < record.chunks.length && record.chunks[i] &&
+        (record.chunks[i].tag === 0x06 || record.chunks[i].tag === 0x05)) {
+      ;[this.parameter2, i] = getFloat(record.chunks, i)
+    }
+
+    ;[this._owner, i] = getRefNode(record, i, 'coedge')
+    ;[this._curve, i] = getRefNode(record, i, 'curve')
+    ;[this.sense, i] = getEnumByTag(record.chunks, i, SENSE)
+
     return i
   }
 
-  getColor() {
-    return { r: this.red, g: this.green, b: this.blue }
-  }
-}
-
-class AttribStDisplay extends AttribSt {
-  constructor() {
-    super()
-  }
-}
-
-class AttribStId extends AttribSt {
-  constructor() {
-    super()
-  }
-}
-
-// ============================================================================
-// Sys (System) Attributes
-// ============================================================================
-
-class AttribSys extends Attrib {
-  constructor() {
-    super()
-  }
-}
-
-class AttribSysConvexity extends AttribSys {
-  constructor() {
-    super()
-  }
-}
-
-class AttribSysAnnotationAttrib extends AttribSys {
-  constructor() {
-    super()
-  }
-}
-
-class AttribSysStichHint extends AttribSys {
-  constructor() {
-    super()
-  }
-}
-
-class AttribSysTag extends AttribSys {
-  constructor() {
-    super()
-  }
-}
-
-class AttribSysVertedge extends AttribSys {
-  constructor() {
-    super()
-  }
-}
-
-// ============================================================================
-// TSL Attributes
-// ============================================================================
-
-class AttribTsl extends Attrib {
-  constructor() {
-    super()
-  }
-}
-
-class AttribTslId extends AttribTsl {
-  constructor() {
-    super()
-  }
-}
-
-class AttribTslColour extends AttribTsl {
-  constructor() {
-    super()
-    this.red = 0.749
-    this.green = 0.749
-    this.blue = 0.749
+  getStart() {
+    const v = this._start ? this._start.entity : null
+    return v ? v.getPosition() : null
   }
 
-  set(record) {
-    let i = super.set(record)
-    ;[this.red, i] = getFloat(record.chunks, i)
-    ;[this.green, i] = getFloat(record.chunks, i)
-    ;[this.blue, i] = getFloat(record.chunks, i)
-    return i
+  getEnd() {
+    const v = this._end ? this._end.entity : null
+    return v ? v.getPosition() : null
   }
 
-  getColor() {
-    return { r: this.red, g: this.green, b: this.blue }
+  getCurve() {
+    return this._curve ? this._curve.entity : null
   }
-}
 
-// ============================================================================
-// Other Attribute Types (stub classes)
-// ============================================================================
+  getParent() {
+    return this._owner ? this._owner.entity : null
+  }
 
-class AttribAtUfld extends Attrib { constructor() { super() } }
-class AttribAtUfldDefmData extends AttribAtUfld { constructor() { super() } }
-class AttribAtUfldDevPair extends AttribAtUfld { constructor() { super() } }
-class AttribAtUfldFlatBend extends AttribAtUfld { constructor() { super() } }
-class AttribAtUfldFfldPosTransf extends AttribAtUfld { constructor() { super() } }
-class AttribAtUfldFfldPosTransfMixUfContourRollTrack extends AttribAtUfldFfldPosTransf { constructor() { super() } }
-class AttribAtUfldFfldPosTransfMixUfTransformTrack extends AttribAtUfldFfldPosTransf { constructor() { super() } }
-class AttribAtUfldNonMergeBend extends AttribAtUfld { constructor() { super() } }
-class AttribAtUfldPosTrack extends AttribAtUfld { constructor() { super() } }
-class AttribAtUfldPosTrackMixUfRobustPositionTrack extends AttribAtUfldPosTrack { constructor() { super() } }
-class AttribAtUfldPosTrackSurfSimp extends AttribAtUfldPosTrack { constructor() { super() } }
-class AttribAcadSolidHistoryPersubent extends Attrib { constructor() { super() } }
-class AttribCwkBase extends Attrib { constructor() { super() } }
-class AttribCwkBaseCswDbid extends AttribCwkBase { constructor() { super() } }
-class AttribCustom extends Attrib { constructor() { super() } }
-class AttribDesigner extends Attrib { constructor() { super() } }
-class AttribDesignerHistory extends AttribDesigner { constructor() { super() } }
-class AttribDesignerSurfaceId extends AttribDesigner { constructor() { super() } }
-class AttribDesignerOwnerTag extends AttribDesigner { constructor() { super() } }
-class AttribDxid extends Attrib { constructor() { super() } }
-class AttribEye extends Attrib { constructor() { super() } }
-class AttribEyeFMesh extends AttribEye { constructor() { super() } }
-class AttribEyePtList extends AttribEye { constructor() { super() } }
-class AttribEyeRefVt extends AttribEye { constructor() { super() } }
-class AttribFdi extends Attrib { constructor() { super() } }
-class AttribFdiLabel extends AttribFdi { constructor() { super() } }
-class AttribKcId extends Attrib { constructor() { super() } }
-class AttribLwd extends Attrib { constructor() { super() } }
-class AttribLwdFMesh extends AttribLwd { constructor() { super() } }
-class AttribLwdPtList extends AttribLwd { constructor() { super() } }
-class AttribLwdRefVT extends AttribLwd { constructor() { super() } }
-class AttribMixOrganization extends Attrib { constructor() { super() } }
-class AttribMixOrganizationBendCenterEdge extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationBendExtendedEdge extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationBendExtendedEdgeProgenitorTagIds extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationBendExtendPlane extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationCornerEdge extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationCreEntityQuality extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationDecalEntity extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationDetailEdgeInfo extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationEntityQuality extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationFlangeTrimEdge extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationFlatPatternVis extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationJacobiCornerEdge extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationLimitTrackingFraceFrom extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationLoftedFlangeNotch extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationNoBendRelief extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationNoCenterline extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationRefoldInfo extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationRolExtents extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationSmoothBendEdge extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationTraceFace extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationUfContourRollExtentTrack extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationUfFaceType extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationUfUnrollTrack extends AttribMixOrganization { constructor() { super() } }
-class AttribMixOrganizationUnfoldInfo extends AttribMixOrganization { constructor() { super() } }
-class AttribNamingMatching extends Attrib { constructor() { super() } }
-class AttribNamingMatchingNMxBrepTag extends AttribNamingMatching { constructor() { super() } }
-class AttribNamingMatchingNMxBrepTagFeature extends AttribNamingMatchingNMxBrepTag { constructor() { super() } }
-class AttribNamingMatchingNMxBrepTagName extends AttribNamingMatchingNMxBrepTag { constructor() { super() } }
-// ... many more naming matching subtypes
-class AttribRBase extends Attrib { constructor() { super() } }
-class AttribRBaseRender extends AttribRBase { constructor() { super() } }
-class AttribRfBase extends Attrib { constructor() { super() } }
-class AttribRfBaseFaceTracker extends AttribRfBase { constructor() { super() } }
-class AttribSg extends Attrib { constructor() { super() } }
-class AttribSgPidName extends AttribSg { constructor() { super() } }
-class AttribSnl extends Attrib { constructor() { super() } }
-class AttribSnlCubitOwner extends AttribSnl { constructor() { super() } }
-class AttribCt extends Attrib { constructor() { super() } }
-class AttribCtCellPtr extends AttribCt { constructor() { super() } }
-class AttribCtCFace extends AttribCt { constructor() { super() } }
-
-// ============================================================================
-// Utility: Extract color from entity's attribute chain
-// ============================================================================
-
-/**
- * Walk attribute chain and find color
- */
-function extractColor(entity) {
-  if (!entity || !entity._attrib) return null
-
-  let attr = entity._attrib.entity
-  const visited = new Set()
-
-  while (attr && !visited.has(attr.index)) {
-    visited.add(attr.index)
-
-    if (attr instanceof AttribStRgbColor ||
-        attr instanceof AttribTslColour ||
-        attr instanceof AttribADeskTrueColor) {
-      return attr.getColor()
+  getPoints() {
+    const points = []
+    const ptStart = this._start ? this._start.entity : null
+    if (ptStart) points.push(ptStart.getPosition())
+    const ptEnd = this._end ? this._end.entity : null
+    if (ptEnd && ptEnd.index !== (ptStart ? ptStart.index : -1)) {
+      points.push(ptEnd.getPosition())
     }
-
-    attr = attr.getNext()
+    return points
   }
 
-  return null
-}
-
-/**
- * Walk attribute chain and find name
- */
-function extractName(entity) {
-  if (!entity || !entity._attrib) return null
-
-  let attr = entity._attrib.entity
-  const visited = new Set()
-
-  while (attr && !visited.has(attr.index)) {
-    visited.add(attr.index)
-
-    if (attr instanceof AttribGenName) {
-      return attr.getName()
-    }
-
-    attr = attr.getNext()
-  }
-
-  return null
-}
-
-// ============================================================================
-// spline.js
-// ============================================================================
-
-/**
- * ACIS Spline Functions
- * B-Spline reading and parsing functions
- * Ported from Acis.py lines 584-1000
- */
-
-
-
-// ============================================================================
-// Curve and Surface Class Mappings (set via setters to avoid circular deps)
-// ============================================================================
-
-let CURVES = null
-let SURFACES = null
-
-/**
- * Set the curve classes mapping (called from index.js after all modules loaded)
- */
-function setCurveClasses(mapping) {
-  CURVES = mapping
-}
-
-/**
- * Set the surface classes mapping (called from index.js after all modules loaded)
- */
-function setSurfaceClasses(mapping) {
-  SURFACES = mapping
-}
-
-// ============================================================================
-// B-Spline Curve Readers
-// ============================================================================
-
-/**
- * Read 2D B-spline curve (parameter space curve)
- */
-function readBS2Curve(chunks, index) {
-  const [dimension, degree, i1] = getDimensionCurve(chunks, index)
-
-  if (dimension === 'nullbs') {
-    return [null, i1]
-  }
-
-  const rational = dimension === 'nurbs'
-  const spline = new BS_Curve(rational, false, degree)
-
-  const [closure, count, i2] = getClosureCurve(chunks, i1)
-  spline.uPeriodic = closure === 'periodic'
-
-  const [resultSpline, i3] = readPoints2DList(spline, count, chunks, i2)
-
-  return [resultSpline, i3]
-}
-
-/**
- * Read 3D B-spline curve
- */
-function readBS3Curve(chunks, index) {
-  const [dimension, degree, i1] = getDimensionCurve(chunks, index)
-
-  if (dimension === 'nullbs') {
-    return [null, i1]
-  }
-
-  const rational = dimension === 'nurbs'
-  const spline = new BS_Curve(rational, false, degree)
-
-  const [closure, count, i2] = getClosureCurve(chunks, i1)
-  spline.uPeriodic = closure === 'periodic'
-
-  const [resultSpline, i3] = readPoints3DList(spline, count, chunks, i2)
-
-  return [resultSpline, i3]
-}
-
-/**
- * Read B-spline surface
- */
-function readBS3Surface(chunks, index) {
-  const [dimension, degreeU, degreeV, i1] = getDimensionSurface(chunks, index)
-
-  if (dimension === 'nullbs') {
-    return [null, i1]
-  }
-
-  const rational = dimension === 'nurbs'
-  const spline = new BS_Surface(rational, false, false, degreeU, degreeV)
-
-  const [closureU, closureV, singU, singV, countU, countV, i2] = getClosureSurface(chunks, i1)
-  spline.uPeriodic = closureU === 'periodic'
-  spline.vPeriodic = closureV === 'periodic'
-
-  const [resultSpline, i3] = readPoints3DSurface(spline, countU, countV, chunks, i2)
-
-  return [resultSpline, i3]
-}
-
-// ============================================================================
-// Spline Surface Reader (with tolerance)
-// ============================================================================
-
-/**
- * Read spline surface with tolerance
- */
-function readSplineSurface(chunks, index, toleranceAtEnd) {
-  let tolerance = 0.0
-  let i = index
-
-  if (!toleranceAtEnd) {
-    ;[tolerance, i] = getLength(chunks, i)
-  }
-
-  const [spline, i2] = readBS3Surface(chunks, i)
-
-  if (toleranceAtEnd && spline !== null) {
-    ;[tolerance, i] = getLength(chunks, i2)
-    return [spline, tolerance, i]
-  }
-
-  return [spline, tolerance, i2]
-}
-
-// ============================================================================
-// Curve Factory (Python readCurve lines 684-693)
-// ============================================================================
-
-/**
- * Read embedded curve definition
- * Creates a curve instance and parses its subtype data
- */
-function readCurve(chunks, index) {
-  const [val, i] = getValue(chunks, index)
-
-  // Null curve check
-  if (val === 'null_curve' || val === 'nullbs' || val === 'null_pcurve') {
-    return [null, i]
-  }
-
-  // If we don't have the curve mappings yet (before initialization), return stub
-  if (!CURVES) {
-    console.warn(`readCurve: CURVES mapping not initialized, returning stub for '${val}'`)
-    return [{ type: val, index: i }, i]
-  }
-
-  // Get the curve class
-  const CurveClass = CURVES[val]
-  if (CurveClass === undefined) {
-    console.warn(`readCurve: Unknown curve type '${val}'`)
-    return [{ type: val, index: i }, i]
-  }
-
-  // Null mapping means null curve
-  if (CurveClass === null) {
-    return [null, i]
-  }
-
-  try {
-    // Create instance and parse subtype
-    const curve = new CurveClass()
-    curve.subtype = val
-    const newIndex = curve.setSubtype(chunks, i)
-    return [curve, newIndex]
-  } catch (e) {
-    console.error(`readCurve: Error parsing curve type '${val}':`, e)
-    throw new Error(`Unknown curve-type '${val}'!`)
-  }
-}
-
-// ============================================================================
-// Surface Factory (Python readSurface lines 695-715)
-// ============================================================================
-
-/**
- * Read embedded surface definition
- * Creates a surface instance and parses its subtype data
- */
-function readSurface(chunks, index) {
-  const chunk = chunks[index]
-  let i = index + 1
-  const subtype = chunk.val || chunk.value
-
-  // Check tag type for valid surface
-  if (chunk.tag === TAG_UTF8_U8 || chunk.tag === TAG_IDENT || chunk.tag === TAG_SUBIDENT) {
-    // Null surface check
-    if (subtype === 'null_surface' || subtype === 'nullbs') {
-      return [null, i]
-    }
-
-    // If we don't have the surface mappings yet (before initialization), return stub
-    if (!SURFACES) {
-      console.warn(`readSurface: SURFACES mapping not initialized, returning stub for '${subtype}'`)
-      return [{ type: subtype, index: i }, i]
-    }
-
-    // Get the surface class
-    const SurfaceClass = SURFACES[subtype]
-    if (SurfaceClass === undefined) {
-      console.warn(`readSurface: Unknown surface type '${subtype}'`)
-      return [{ type: subtype, index: i }, i]
-    }
-
-    // Null mapping means null surface
-    if (SurfaceClass === null) {
-      return [null, i]
-    }
-
-    try {
-      // Create instance and parse subtype
-      const surface = new SurfaceClass()
-      surface.subtype = subtype
-      const newIndex = surface.setSubtype(chunks, i)
-      return [surface, newIndex]
-    } catch (e) {
-      console.error(`readSurface: Error parsing surface type '${subtype}':`, e)
-      throw new Error(`Unknown surface-type '${subtype}'!`)
-    }
-  }
-
-  // FIXME: this is a dirty hack from Python (lines 709-715)
-  if (chunk.tag === TAG_DOUBLE) {
-    const [a, i2] = getFloats(chunks, index, 5)
-    return [null, i2]
-  }
-  if (chunk.tag === TAG_POSITION || chunk.tag === TAG_VECTOR_3D) {
-    const [a, i2] = getFloats(chunks, i, 2)
-    return [null, i2]
-  }
-
-  return [null, i]
-}
-
-// ============================================================================
-// Law Reader (Python readLaw lines 659-677)
-// ============================================================================
-
-// Transform class reference (set via setter to avoid circular deps)
-let TransformClass = null
-
-/**
- * Set the Transform class (called from index.js after all modules loaded)
- */
-function setTransformClass(cls) {
-  TransformClass = cls
-}
-
-/**
- * Read law (readLaw in Python lines 659-677)
- * Handles special cases: TRANS, EDGE, SPLINE_LAW, plus formula expressions
- */
-function readLaw(chunks, index) {
-  const [name, i1] = getText(chunks, index)
-
-  // Null law
-  if (name === 'null_law') {
-    return [[name, null], i1]
-  }
-
-  // Special law types (Python lines 661-676)
-  if (name === 'TRANS') {
-    // Transform law: parse a Transform inline
-    if (!TransformClass) {
-      console.warn('readLaw: TransformClass not initialized for TRANS type')
-      return [[name, null], i1]
-    }
-    const transform = new TransformClass()
-    const i2 = transform.setBulk(chunks, i1)
-    return [[name, transform], i2]
-  }
-
-  if (name === 'EDGE') {
-    // Edge law: curve + 2 floats (parameter range)
-    const [curve, i2] = readCurve(chunks, i1)
-    const [floats, i3] = getFloats(chunks, i2, 2)
-    return [[name, curve, floats], i3]
-  }
-
-  if (name === 'SPLINE_LAW') {
-    // Spline law: integer + 2 float arrays + point
-    const [a, i2] = getInteger(chunks, i1)
-    const [b, i3] = getFloatArray(chunks, i2)
-    const [c, i4] = getFloatArray(chunks, i3)
-    const [d, i5] = getPoint(chunks, i4)
-    return [[name, a, b, c, d], i5]
-  }
-
-  // Read sub-laws based on type (formula expressions)
-  const subLaws = []
-  let i = i1
-
-  // Different law types have different data
-  switch (name) {
-    case 'vec':
-    case 'vector': {
-      // Vector law: 3 sub-laws for x, y, z
-      for (let k = 0; k < 3; k++) {
-        const [subLaw, i2] = readLaw(chunks, i)
-        subLaws.push(subLaw)
-        i = i2
+  build() {
+    if (this._readyToBuild) {
+      this._readyToBuild = false
+      const curve = this.getCurve()
+      if (curve) {
+        const p1 = this.getStart()
+        const p2 = this.getEnd()
+        this.shape = curve.build(p1, p2)
+        if (this.shape && this.sense === 'reversed') {
+          // Reverse the shape
+        }
       }
-      break
     }
+    return this.shape
+  }
+}
 
-    case 'add':
-    case 'sub':
-    case 'mult':
-    case 'div':
-    case 'cross':
-    case 'dot': {
-      // Binary operators: 2 sub-laws
-      const [law1, i2] = readLaw(chunks, i)
-      const [law2, i3] = readLaw(chunks, i2)
-      subLaws.push(law1, law2)
-      i = i3
-      break
-    }
-
-    case 'neg':
-    case 'norm':
-    case 'size':
-    case 'cos':
-    case 'sin':
-    case 'tan':
-    case 'exp':
-    case 'ln':
-    case 'sqrt': {
-      // Unary operators: 1 sub-law
-      const [subLaw, i2] = readLaw(chunks, i)
-      subLaws.push(subLaw)
-      i = i2
-      break
-    }
-
-    case 'const':
-    case 'constant': {
-      // Constant value
-      const [val, i2] = getFloat(chunks, i)
-      subLaws.push(val)
-      i = i2
-      break
-    }
-
-    case 'identity':
-    case 'X': {
-      // Identity/variable - no sub-laws
-      break
-    }
-
-    default:
-      // Unknown law type - return as Law object (Python line 677)
-      // Just return the name, caller can handle unknown types
-      console.warn(`Unknown law type: ${name}`)
+/**
+ * Tolerant Edge
+ */
+class EdgeTolerance extends Edge {
+  constructor() {
+    super()
+    this.tolerance = 0.0
   }
 
-  return [[name, subLaws], i]
+  set(record) {
+    let i = super.set(record)
+    // Tolerance is read in parent class for some versions
+    return i
+  }
 }
 
 // ============================================================================
-// Formula Reader (Python readFormula lines 1063-1072)
+// Vertex Entity
 // ============================================================================
 
 /**
- * Read formula (Python lines 1063-1072)
- * Reads formula name + count + array of laws
+ * Vertex entity - point in topology
  */
-function readFormula(chunks, index) {
-  const [frml, i1] = getValue(chunks, index)
-
-  // Null law
-  if (frml === 'null_law') {
-    return [[null, []], i1]
+class Vertex extends Topology {
+  constructor() {
+    super()
+    this._owner = null  // Owning edge
+    this._point = null  // Point geometry
+    this.count = -1     // Number of edges using this vertex
   }
 
-  // Read count of sub-laws
-  const [n, i2] = getInteger(chunks, i1)
+  set(record) {
+    let i = super.set(record)
+    ;[this._owner, i] = getRefNode(record, i, 'edge')
 
-  // Read n laws
-  const vars = []
-  let i = i2
-  for (let k = 0; k < n; k++) {
-    const [v, i3] = readLaw(chunks, i)
-    vars.push(v)
-    i = i3
+    if (getAsmMajor() > 217) {
+      i += 1 // skip
+    }
+
+    // Inventor workaround
+    if (record.chunks[i] && record.chunks[i].tag !== TAG_ENTITY_REF) {
+      i += 1 // skip count
+    }
+
+    ;[this._point, i] = getRefNode(record, i, 'point')
+
+    return i
   }
 
-  return [[frml, vars], i]
+  getParent() {
+    return this._owner ? this._owner.entity : null
+  }
+
+  getPoint() {
+    return this._point ? this._point.entity : null
+  }
+
+  getPosition() {
+    const p = this.getPoint()
+    return p ? p.position : null
+  }
 }
-
-// ============================================================================
-// Blend Reader (Python lines 651-657)
-// ============================================================================
 
 /**
- * Read blend data - B-spline curve with sense and factor
+ * Tolerant Vertex
  */
-function readBlend(chunks, index) {
-  const [nubs, i] = readBS2Curve(chunks, index)
-  if (nubs !== null) {
-    let i2 = i
-    ;[nubs.sense, i2] = getEnumByTag(chunks, i2, SENSE)
-    ;[nubs.factor, i2] = getFloat(chunks, i2)
-    return [nubs, i2]
+class VertexTolerance extends Vertex {
+  constructor() {
+    super()
+    this.tolerance = 0.0
   }
-  return [null, index]
+
+  set(record) {
+    let i = super.set(record)
+    ;[this.tolerance, i] = getFloat(record.chunks, i)
+
+    if (getAsmMajor() > 217) {
+      i += 2 // skip floats
+    }
+
+    return i
+  }
 }
 
 // ============================================================================
-// Loft Subdata Reader
+// Cell Entities (for cellular topology)
 // ============================================================================
 
-/**
- * Read loft section subdata
- */
-function readLofSubdata(chunks, index) {
-  let i = index
-  const [type, i1] = getInteger(chunks, i)
-  i = i1
-
-  const [n, i2] = getInteger(chunks, i)
-  i = i2
-
-  const [m, i3] = getInteger(chunks, i)
-  i = i3
-
-  const v = []
-  for (let k = 0; k < m; k++) {
-    const [val, i4] = getFloat(chunks, i)
-    v.push(val)
-    i = i4
+class Cell extends Topology {
+  constructor() {
+    super()
   }
-
-  return [[type, n, m, v], i]
 }
 
-// ============================================================================
-// Discontinuity Info Reader (Python lines 717-728)
-// ============================================================================
-
-/**
- * Read discontinuity info - 6 float arrays + optional boolean
- */
-function getDiscontinuityInfo(chunks, index, inventor) {
-  let i = index
-
-  // Read 6 float arrays
-  const [a1, i1] = getFloatArray(chunks, i)
-  const [a2, i2] = getFloatArray(chunks, i1)
-  const [a3, i3] = getFloatArray(chunks, i2)
-  const [a4, i4] = getFloatArray(chunks, i3)
-  const [a5, i5] = getFloatArray(chunks, i4)
-  const [a6, i6] = getFloatArray(chunks, i5)
-
-  let e = false
-  let finalIndex = i6
-
-  if (inventor) {
-    ;[e, finalIndex] = getBoolean(chunks, i6)
+class Cell3d extends Cell {
+  constructor() {
+    super()
   }
-
-  return [[a1, a2, a3, a4, a5, a6, e], finalIndex]
 }
 
-// ============================================================================
-// reader.js
-// ============================================================================
+class CFace extends Topology {
+  constructor() {
+    super()
+  }
+}
+
+class CShell extends Topology {
+  constructor() {
+    super()
+  }
+}
+
+  // ============================================================================
+  // reader.js
+  // ============================================================================
 
 /**
  * ACIS Reader
  * Main parser for text (.sat) and binary (.sab) ACIS files
  * Ported from Acis.py lines 5000-5350
  */
-
-
 
 // ============================================================================
 // Header Class
@@ -8014,9 +7365,616 @@ class AcisReader {
   }
 }
 
+  // ============================================================================
+  // utils.js
+  // ============================================================================
+
+/**
+ * ACIS Utility Functions
+ * Helper functions for reading values from chunks
+ * Ported from Acis.py lines 132-700
+ */
+
 // ============================================================================
-// type-mappings.js
+// Reader State (module-level)
 // ============================================================================
+
+let _reader = null
+let _scale = 1.0
+let _version = 7.0
+
+function getReader() {
+  return _reader
+}
+
+function setReader(reader) {
+  _reader = reader
+}
+
+function getScale() {
+  return _reader ? _reader.scale : _scale
+}
+
+function setScale(s) {
+  _scale = s
+}
+
+function getVersion() {
+  return _reader ? _reader.version : _version
+}
+
+function setVersion(v) {
+  _version = v
+}
+
+function isASM() {
+  if (_reader && _reader.header) {
+    return _reader.header.asm !== undefined
+  }
+  return false
+}
+
+function getAsmMajor() {
+  if (_reader && _reader.header && _reader.header.asm) {
+    return _reader.header.asm[0]
+  }
+  return 0
+}
+
+// ============================================================================
+// Basic Value Getters
+// ============================================================================
+
+/**
+ * Get raw value from chunk at index
+ */
+function getValue(chunks, index) {
+  const chunk = chunks[index]
+  return [chunk.val !== undefined ? chunk.val : chunk.value, index + 1]
+}
+
+/**
+ * Get entity reference from chunk
+ * Matches Python Acis.py getRefNode() function behavior
+ */
+function getRefNode(record, index, expectedName = null) {
+  if (index >= record.chunks.length) {
+    return [null, index]
+  }
+
+  const chunk = record.chunks[index]
+
+  if (chunk.tag === TAG_ENTITY_REF || chunk.type === 'entity_ref') {
+    const ref = chunk.record || chunk
+
+    // If null ref (-1), return null
+    if (chunk.val === -1 || ref === null || !ref.name) {
+      return [null, index + 1]
+    }
+
+    // If expectedName provided, check if ref matches
+    if (expectedName !== null && !ref.name.endsWith(expectedName)) {
+      // Python raises exception here, but we'll be lenient and just warn
+      // console.warn(`Expected ${expectedName} but found ${ref.name} at index ${index}`)
+    }
+
+    return [ref, index + 1]
+  }
+
+  // Not an entity ref - return null (Python would raise exception)
+  return [null, index]
+}
+
+/**
+ * Get boolean value from chunk
+ */
+function getBoolean(chunks, index) {
+  const chunk = chunks[index]
+  if (chunk.tag === TAG_UTF8_U8 || chunk.type === 'string') {
+    const val = chunk.val || chunk.value
+    return [val === 'T', index + 1]
+  }
+  if (chunk.tag === TAG_TRUE || chunk.value === true) {
+    return [true, index + 1]
+  }
+  if (chunk.tag === TAG_FALSE || chunk.value === false) {
+    return [false, index + 1]
+  }
+  return [!!chunk.val, index + 1]
+}
+
+/**
+ * Get integer value from chunk
+ */
+function getInteger(chunks, index) {
+  const [val, i] = getValue(chunks, index)
+  return [parseInt(val, 10), i]
+}
+
+/**
+ * Get multiple integer values
+ */
+function getIntegers(chunks, index, count) {
+  let i = index
+  const arr = []
+  for (let n = 0; n < count; n++) {
+    const [val, ni] = getInteger(chunks, i)
+    arr.push(val)
+    i = ni
+  }
+  return [arr, i]
+}
+
+/**
+ * Get long integer value
+ */
+function getLong(chunks, index) {
+  const [val, i] = getValue(chunks, index)
+  return [parseInt(val, 10), i]
+}
+
+/**
+ * Get float value from chunk
+ */
+function getFloat(chunks, index) {
+  const [val, i] = getValue(chunks, index)
+  return [parseFloat(val), i]
+}
+
+/**
+ * Get multiple float values
+ */
+function getFloats(chunks, index, count) {
+  let i = index
+  const arr = []
+  let n = 0
+  while (n < count) {
+    const chunk = chunks[i]
+    i++
+    if (chunk.tag === TAG_POSITION || chunk.tag === TAG_VECTOR_3D ||
+        chunk.type === 'position' || chunk.type === 'vector3d') {
+      const v = chunk.val || chunk.value
+      if (v.x !== undefined) {
+        arr.push(v.x, v.y, v.z)
+        n += 3
+      } else if (Array.isArray(v)) {
+        arr.push(...v)
+        n += v.length
+      }
+    } else {
+      arr.push(parseFloat(chunk.val !== undefined ? chunk.val : chunk.value))
+      n++
+    }
+  }
+  return [arr, i]
+}
+
+/**
+ * Get scaled float values
+ */
+function getFloatsScaled(chunks, index, count) {
+  const s = getScale()
+  let i = index
+  const arr = []
+  for (let n = 0; n < count; n++) {
+    const [f, ni] = getFloat(chunks, i)
+    arr.push(f * s)
+    i = ni
+  }
+  return [arr, i]
+}
+
+/**
+ * Get float array (count followed by floats)
+ */
+function getFloatArray(chunks, index) {
+  const [n, i1] = getInteger(chunks, index)
+  const [arr, i2] = getFloats(chunks, i1, n)
+  return [arr, i2]
+}
+
+/**
+ * Get length value (scaled)
+ */
+function getLength(chunks, index) {
+  const [l, i] = getFloat(chunks, index)
+  return [l * getScale(), i]
+}
+
+/**
+ * Get text value
+ */
+function getText(chunks, index) {
+  const chunk = chunks[index]
+  if (chunk.tag === TAG_DOUBLE) {
+    return getValue(chunks, index + 1)
+  }
+  return getValue(chunks, index)
+}
+
+// ============================================================================
+// Enum Getters
+// ============================================================================
+
+/**
+ * Get enum value by tag
+ */
+function getEnumByTag(chunks, index, values) {
+  const chunk = chunks[index]
+  let val = chunk.val !== undefined ? chunk.val : chunk.value
+
+  if (chunk.tag === TAG_UTF8_U8 || chunk.type === 'string') {
+    // Text value - look up in values
+    for (const key of Object.keys(values)) {
+      if (values[key] === val) {
+        return [val, index + 1]
+      }
+    }
+    // Return raw value if not found
+    return [val, index + 1]
+  }
+
+  if (chunk.tag === TAG_TRUE || chunk.value === true) {
+    return [values[TAG_TRUE] || values['T'] || values[1], index + 1]
+  }
+  if (chunk.tag === TAG_FALSE || chunk.value === false) {
+    return [values[TAG_FALSE] || values['F'] || values[0], index + 1]
+  }
+
+  // Numeric enum
+  if (values[val] !== undefined) {
+    return [values[val], index + 1]
+  }
+
+  return [val, index + 1]
+}
+
+/**
+ * Get enum value by value lookup
+ */
+function getEnumByValue(chunks, index, values) {
+  const chunk = chunks[index]
+  const val = chunk.val !== undefined ? chunk.val : chunk.value
+
+  if (values[val] !== undefined) {
+    return [values[val], index + 1]
+  }
+  return [val, index + 1]
+}
+
+/**
+ * Get sides enum (single/double with optional side)
+ */
+function getSides(chunks, index) {
+  const [sides, i] = getEnumByTag(chunks, index, SIDES)
+  if (sides === 'double') {
+    const [side, i2] = getEnumByTag(chunks, i, SIDE)
+    return [sides, side, i2]
+  }
+  return [sides, null, i]
+}
+
+/**
+ * Get singularity enum
+ */
+function getSingularity(chunks, index) {
+  if (getVersion() > 4.0) {
+    return getEnumByValue(chunks, index, SINGULARITY)
+  }
+  return ['full', index]
+}
+
+// ============================================================================
+// Vector/Point Getters
+// ============================================================================
+
+/**
+ * Get point (3 floats or position chunk)
+ */
+function getPoint(chunks, index) {
+  const chunk = chunks[index]
+  if (chunk.tag === TAG_POSITION || chunk.tag === TAG_VECTOR_3D ||
+      chunk.type === 'position' || chunk.type === 'vector3d') {
+    const v = chunk.val || chunk.value
+    if (v.x !== undefined) {
+      return [{ x: v.x, y: v.y, z: v.z }, index + 1]
+    }
+    return [{ x: v[0], y: v[1], z: v[2] }, index + 1]
+  }
+  const [x, i1] = getFloat(chunks, index)
+  const [y, i2] = getFloat(chunks, i1)
+  const [z, i3] = getFloat(chunks, i2)
+  return [{ x, y, z }, i3]
+}
+
+/**
+ * Get vector (point normalized)
+ */
+function getVector(chunks, index) {
+  return getPoint(chunks, index)
+}
+
+/**
+ * Get location (scaled point)
+ */
+function getLocation(chunks, index) {
+  const [p, i] = getPoint(chunks, index)
+  const s = getScale()
+  return [{ x: p.x * s, y: p.y * s, z: p.z * s }, i]
+}
+
+// ============================================================================
+// Range/Interval Getters
+// ============================================================================
+
+/**
+ * Get range value
+ */
+function getRange(chunks, index, defaultVal, scale) {
+  const [type, i] = getEnumByTag(chunks, index, RANGE)
+  let val = defaultVal
+
+  if (type === 'F' || type === TAG_FALSE) {
+    const [v, i2] = getFloat(chunks, i)
+    return [new Range(type, v, scale), i2]
+  } else if (type === 'T') {
+    const [arr, i2] = getFloats(chunks, i, 7)
+    val = arr[0]
+    return [new Range(type, val, scale), i2]
+  }
+
+  return [new Range(type, val, scale), i]
+}
+
+/**
+ * Get interval (lower and upper range)
+ */
+function getInterval(chunks, index, defMin, defMax, scale) {
+  const [lower, i1] = getRange(chunks, index, defMin, scale)
+  const [upper, i2] = getRange(chunks, i1, defMax, scale)
+  return [new Interval(lower, upper), i2]
+}
+
+// ============================================================================
+// Dimension Getters (for curves/surfaces)
+// ============================================================================
+
+/**
+ * Get curve dimension (nullbs|nurbs|nubs)
+ */
+function getDimensionCurve(chunks, index) {
+  const [val, i] = getValue(chunks, index)
+  if (val === 'nullbs') {
+    return [val, 0, i]
+  }
+  if (val === 'nurbs' || val === 'nubs') {
+    const [degrees, i2] = getInteger(chunks, i)
+    return [val, degrees, i2]
+  }
+  throw new Error(`Unknown DIMENSION '${val}'`)
+}
+
+/**
+ * Get surface dimension (nullbs|nurbs|nubs|summary)
+ */
+function getDimensionSurface(chunks, index) {
+  const [val, i] = getValue(chunks, index)
+  if (val === 'nullbs') {
+    return [val, null, null, i]
+  }
+  if (val === 'nurbs' || val === 'nubs' || val === 'summary') {
+    const [degreesU, i2] = getInteger(chunks, i)
+    const [degreesV, i3] = getInteger(chunks, i2)
+    return [val, degreesU, degreesV, i3]
+  }
+  throw new Error(`Unknown DIMENSION '${val}'`)
+}
+
+// ============================================================================
+// Closure Getters
+// ============================================================================
+
+/**
+ * Get curve closure
+ */
+function getClosureCurve(chunks, index) {
+  const [closure, i] = getEnumByValue(chunks, index, CLOSURE)
+  if (closure === 'open' || closure === 'closed' || closure === 'periodic') {
+    const [knots, i2] = getInteger(chunks, i)
+    return [closure, knots, i2]
+  }
+  throw new Error(`Unknown closure '${closure}'`)
+}
+
+/**
+ * Get surface closure
+ */
+function getClosureSurface(chunks, index) {
+  let [closureU, i] = getEnumByValue(chunks, index, CLOSURE)
+
+  // Handle optional prefix
+  if (closureU === 'both' || closureU === 'u' || closureU === 'v') {
+    [closureU, i] = getEnumByValue(chunks, i, CLOSURE)
+  }
+
+  if (closureU === 'open' || closureU === 'closed' || closureU === 'periodic') {
+    const [closureV, i2] = getEnumByValue(chunks, i, CLOSURE)
+    const [singularityU, i3] = getEnumByValue(chunks, i2, SINGULARITY)
+    const [singularityV, i4] = getEnumByValue(chunks, i3, SINGULARITY)
+    const [countU, i5] = getInteger(chunks, i4)
+    const [countV, i6] = getInteger(chunks, i5)
+    return [closureU, closureV, singularityU, singularityV, countU, countV, i6]
+  }
+
+  throw new Error(`Unknown closure '${closureU}'`)
+}
+
+// ============================================================================
+// Unknown/Version-specific Getters
+// ============================================================================
+
+/**
+ * Get unknown FT values (version-specific)
+ */
+function getUnknownFT(chunks, index) {
+  let i = index
+  let val = 'F'
+  let arr = []
+  let val2 = 'F'
+
+  if (getVersion() > 7.0 && !isASM()) {
+    [val, i] = getValue(chunks, i)
+    if (val === 'T') {
+      [arr, i] = getFloats(chunks, i, 6)
+      [val2, i] = getValue(chunks, i)
+    }
+  }
+
+  return [[val, arr, val2], i]
+}
+
+// ============================================================================
+// Knot/Mult Readers
+// ============================================================================
+
+/**
+ * Read knots and multiplicities
+ */
+function readKnotsMults(count, chunks, index) {
+  const knots = []
+  const mults = []
+  let i = index
+
+  for (let j = 0; j < count; j++) {
+    const [knot, i2] = getFloat(chunks, i)
+    const [mult, i3] = getInteger(chunks, i2)
+    knots.push(knot)
+    mults.push(mult)
+    i = i3
+  }
+
+  return [knots, mults, i]
+}
+
+/**
+ * Adjust multiplicities for clamped B-spline
+ */
+function adjustMultsKnots(knots, mults, degree) {
+  const newMults = [...mults]
+  newMults[0] = degree + 1
+  newMults[newMults.length - 1] = degree + 1
+  return [knots, newMults]
+}
+
+// ============================================================================
+// Points List Readers
+// ============================================================================
+
+/**
+ * Read 2D points list for curve
+ */
+function readPoints2DList(spline, count, chunks, index) {
+  let i
+  [spline.uKnots, spline.uMults, i] = readKnotsMults(count, chunks, index)
+
+  const us = spline.uMults.reduce((a, b) => a + b, 0) - (spline.uDegree - 1)
+  spline.poles = new Array(us).fill(null)
+  spline.weights = spline.rational ? new Array(us).fill(1) : null
+
+  for (let k = 0; k < us; k++) {
+    const [u, i2] = getLength(chunks, i)
+    const [v, i3] = getLength(chunks, i2)
+    spline.poles[k] = new V2D(u, v)
+    i = i3
+    if (spline.rational) {
+      [spline.weights[k], i] = getFloat(chunks, i)
+    }
+  }
+
+  [spline.uKnots, spline.uMults] = adjustMultsKnots(spline.uKnots, spline.uMults, spline.uDegree)
+
+  return [spline, i]
+}
+
+/**
+ * Read 3D points list for curve
+ */
+function readPoints3DList(spline, count, chunks, index) {
+  let i
+  [spline.uKnots, spline.uMults, i] = readKnotsMults(count, chunks, index)
+
+  const us = spline.uMults.reduce((a, b) => a + b, 0) - (spline.uDegree - 1)
+  spline.poles = new Array(us).fill(null)
+  spline.weights = spline.rational ? new Array(us).fill(1) : null
+
+  for (let u = 0; u < us; u++) {
+    [spline.poles[u], i] = getLocation(chunks, i)
+    if (spline.rational) {
+      [spline.weights[u], i] = getFloat(chunks, i)
+    }
+  }
+
+  [spline.uKnots, spline.uMults] = adjustMultsKnots(spline.uKnots, spline.uMults, spline.uDegree)
+
+  return [spline, i]
+}
+
+/**
+ * Read 3D points for surface
+ */
+function readPoints3DSurface(spline, countU, countV, chunks, index) {
+  let i
+  [spline.uKnots, spline.uMults, i] = readKnotsMults(countU, chunks, index);
+  [spline.vKnots, spline.vMults, i] = readKnotsMults(countV, chunks, i)
+
+  const us = spline.uMults.reduce((a, b) => a + b, 0) - (spline.uDegree - 1)
+  const vs = spline.vMults.reduce((a, b) => a + b, 0) - (spline.vDegree - 1)
+
+  spline.poles = Array.from({ length: us }, () => new Array(vs).fill(null))
+  spline.weights = spline.rational
+    ? Array.from({ length: us }, () => new Array(vs).fill(1))
+    : null
+
+  for (let v = 0; v < vs; v++) {
+    for (let u = 0; u < us; u++) {
+      [spline.poles[u][v], i] = getLocation(chunks, i)
+      if (spline.rational) {
+        [spline.weights[u][v], i] = getFloat(chunks, i)
+      }
+    }
+  }
+
+  [spline.uKnots, spline.uMults] = adjustMultsKnots(spline.uKnots, spline.uMults, spline.uDegree);
+  [spline.vKnots, spline.vMults] = adjustMultsKnots(spline.vKnots, spline.vMults, spline.vDegree)
+
+  return [spline, i]
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Check if value is a string
+ */
+function isString(val) {
+  return typeof val === 'string'
+}
+
+/**
+ * Reshape flat array into 2D array
+ */
+function reshape(arr, cols) {
+  const result = []
+  for (let i = 0; i < arr.length; i += cols) {
+    result.push(arr.slice(i, i + cols))
+  }
+  return result
+}
+
+  // ============================================================================
+  // type-mappings.js
+  // ============================================================================
 
 /**
  * ACIS Type Mappings
@@ -8025,12 +7983,6 @@ class AcisReader {
  */
 
 // Import all entity classes
-
-
-
-
-
-
 // ============================================================================
 // Record Name to Entity Class Mapping
 // ============================================================================
@@ -8231,6 +8183,20 @@ const RECORD_2_ENTITY = {
 // ============================================================================
 
 
+
+// ============================================================================
+// Utility Functions for Type Resolution
+// ============================================================================
+
+/**
+ * Get entity class for a record name
+ * @param {string} name - Record name
+ * @returns {Function|null} Entity class constructor or null
+ */
+function getEntityClass(name) {
+  return RECORD_2_ENTITY[name] || null
+}
+
 /**
  * Check if a record name is known
  * @param {string} name - Record name
@@ -8240,9 +8206,9 @@ function isKnownRecordType(name) {
   return name in RECORD_2_ENTITY
 }
 
-// ============================================================================
-// geometry-builder.js
-// ============================================================================
+  // ============================================================================
+  // geometry-builder.js
+  // ============================================================================
 
 /**
  * ACIS Geometry Builder for OpenCascade.js
@@ -9688,51 +9654,984 @@ function convertACISBodiesToShape(oc, bodies) {
 // ============================================================================
 
 
+  // ============================================================================
+  // importer-utils.js
+  // ============================================================================
+
+/**
+ * Inventor Loader Utility Functions
+ * Binary reading functions for parsing Inventor IPT/IAM/F3D files
+ * Ported from importerUtils.py
+ */
+
 // ============================================================================
-// Circular Dependency Resolution
+// UUID Name Mappings
 // ============================================================================
 
-// Wire up the circular dependencies
-// surfaces.js uses _readCurveFn, _readSurfaceFn, _readLawFn as placeholders
-// spline.js defines the actual readCurve, readSurface, readLaw functions
-setCurveReader(readCurve)
-setSurfaceReader(readSurface)
-setLawReader(readLaw)
-
-// Initialize curve and surface class mappings (from index.js)
-const _CURVES = {
-  'compcurv': CurveComp,
-  'degenerate_curve': CurveDegenerate,
-  'ellipse': CurveEllipse,
-  'intcurve': CurveInt,
-  'intcurve-intcurve': CurveIntInt,
-  'pcurve': CurveP,
-  'straight': CurveStraight,
-  'null_curve': null,
-  'null_pcurve': null
+const UUID_NAMES = {
+  '3c7f67aa4dd7848a040c58894ab06552': '_BodiesFolder',
+  '328fc2ea44d13ec5f05abeb87d4aabca': '_ViewDirectionCollection',
+  '8da49a2311d60c3210005aab87ae3483': 'AGxInstanceNode',
+  'b91e695f11d52794100011ab87ae3483': 'AGxMultiBodyNode',
+  '21e870bb11d0d2d000d8ccbc0663dc09': 'BRxEntry',
+  'cb0adcaf11d50e7860009ba6c588fbb0': 'EExCollector',
+  '6759d86f11d27838600094b70b02ecb0': 'FWxRenderingStyle',
+  'a3ebe1984b705d656174d7969e5ae726': 'MBxBodyNode',
+  'a03874b011d41238600018aa9dccefb0': 'MBxContourFlangeFeature',
+  'c4c14b9011d328ff60004da99dccefb0': 'MBxFaceFeature',
+  'c3dddc0811d397d06000a7a99dccefb0': 'MBxFlangeFeature',
+  '10d6c06b46086923c73c0faca268550f': 'MBxSheetMetalRuleStyle',
+  'c098d3cf11d5345310003697ab9f0ab5': 'MBRDxPunchToolFeature',
+  '6045231311d30d7a6000ecb21d6eefb0': 'MBxUserSettingsAttribute',
+  'cadd6468467ce6ee8e1494884110a2da': 'MIxBrepComponent',
+  'f645595c11d51333100060a6bba647b5': 'MIxTransactablePartition',
+  'd81cde4711d265f760005dbead9287b0': 'NBxEntry',
+  '74e3441311d25aeb60005bbead9287b0': 'NBxFolder',
+  'd8705bc711d15553000825a5b17adc09': 'NBxGraphicsArea',
+  'dbbad87b11d228b0600052bead9287b0': 'NBxItem',
+  '4c41596411d12e13000824a5fd7adc09': 'NBxNote',
+  '3c95b7ce11d13388000820a5b17adc09': 'NBxNotebook',
+  '9215a16211d19776600055bd861c3cb0': 'NBxNoteGlyphGroup',
+  'fb96d24a11d18877600046bd861c3cb0': 'NBxNoteGlyphNode',
+  'cc253bb711d15553000825a5b17adc09': 'NBxTextArea',
+  'ccc5085a11d1aa4c0008c8ba32a3dc09': 'NMxFaceMergeData',
+  'cce9204211d171c50008a7ba32a3dc09': 'NMxNameTable',
+  'dd4c4d3a4fbbf55e16b785853b52d4dc': 'PMxASMFlatPatternPartRepresentation',
+  '9a676a5011d45da66000e3b81269f1b0': 'PMxBodyNode',
+  'af48560f11d48dc71000d58dc04a0ab5': 'PMxColorStylePrimAttr',
+  '7dfc244811d461a01000c895bba647b5': 'PMxCompositeFeatureOutline',
+  'b251bfc011d24761a0001580d694c7c9': 'PMxEntryManager',
+  'c0014c894bd6a537fa9444be54ebc63d': 'PMxImage2D',
+  '022ac1b511d20d356000f99ac5361ab0': 'PMxPartDrawAttr',
+  'ca7163a311d0d3b20008bfbb21eddc09': 'PMxPartNode',
+  '5e382456497725cff44fdeafccace65e': 'PMxPartRepresentation',
+  'a94779e111d438066000b1b7b035f1b0': 'PMxPatternOutline',
+  'a94779e011d438066000b1b7b035f1b0': 'PMxSingleFeatureOutline',
+  'f7676ab011d23618a0001280d694c7c9': 'PMxSketchEntry',
+  '590d0a1011d1e6ca80006fb1e13554c7': 'RDxAngle2',
+  'bf3b5c8411d2e92a60004bb38932edb0': 'RDxAngle3Points2',
+  '6d8a4ac711d4490f6000e6ab3a39fbb0': 'RDxAngleInterfaceDef',
+  'ce52df3b11d0d2d00008ccbc0663dc09': 'RDxArc2',
+  'bee90c4111d43c8280005a9a88fdf9c6': 'RDxAtomicInterfaceDef',
+  'de818cc011d452d9c000ba967a14684f': 'RDxBendConstraint',
+  '90874d4711d0d1f80008cabc0663dc09': 'RDxBody',
+  '90874d4811d0d1f80008cabc0663dc09': 'RDxBodySet',
+  '2b24130911d272cc60007bb79b49ebb0': 'RDxBrowserFolder',
+  '9e43716a11d20fa5600084b7b035c3b0': 'RDxCircle3',
+  '4ef32ef04cf83c27f0b185a66f245b22': 'RDxClientFeature',
+  '90874d9411d0d1f80008cabc0663dc09': 'RDxCoincident2',
+  '90874d5911d0d1f80008cabc0663dc09': 'RDxComponent',
+  '81afc10f11d514051000569772d147b5': 'RDxCompositeInterfaceDef',
+  '778752c64a5426253aab58b51014c910': 'RDxCurveToSurfaceProjection',
+  '7f936baa4aef3859f4b80e8c548a4a11': 'RDxDecalFeature',
+  '27ecb60f11d430c3c0001985e89c6b4f': 'RDxDerivedAssembly',
+  'cd7c1c534dd0d3096a46e89e3ba9d923': 'RDxDerivedOccDataCollector',
+  'bfb5eb9311d443e8c0001c85e89c6b4f': 'RDxDerivedOccFeature',
+  '255d7ed711d3b5f2c0000385e89c6b4f': 'RDxDerivedPart',
+  '26287e9611d490bd1000e2962dba09b5': 'RDxDeselTableNode',
+  '89b87c6f11d2e0d26000f1b26c74fcb0': 'RDxDiagProfileInvalidLoop',
+  '3683ce3311d2fcf16000fab26c74fcb0': 'RDxDiagSketchDimRefGeomFailed',
+  '74df96e011d1e069800066b1e13554c7': 'RDxDiameter2',
+  '1105855811d295e360000cb38932edb0': 'RDxDistanceDimension2',
+  '10b6adef45f57b24911db28d8c498f80': 'RDxDistanceDimension3',
+  '90874d5311d0d1f80008cabc0663dc09': 'RDxEdgeId',
+  '9e43716b11d20fa5600084b7b035c3b0': 'RDxEllipse3',
+  '4507d46011d1e6be80006fb1e13554c7': 'RDxEllipticArc2',
+  '748fbd6411d1c41f6000b3b801f31bb0': 'RDxFaceSurfaceId',
+  '90874d9111d0d1f80008cabc0663dc09': 'RDxFeature',
+  'fd1f3f2111d449d88000679a88fdf9c6': 'RDxFlushInterfaceDef',
+  'b71cbec94d8922eaa66f24ad3b81c470': 'RDxHelixConstraint3',
+  '00acc00011d1e05f800066b1e13554c7': 'RDxHorizontalDistance2',
+  '1b16984a11d28fce6000bdb72508ebb0': 'RDxHospital',
+  '6d8a4ac911d4490f6000e6ab3a39fbb0': 'RDxInsertInterfaceDef',
+  'dfb2586a11d60a0a10002fbd891e89b5': 'RDxIntersectionCurve',
+  'ce52df3a11d0d2d00008ccbc0663dc09': 'RDxLine2',
+  '8ef06c8911d1043c60007cb801f31bb0': 'RDxLine3',
+  'a327786911d19690000826bd0663dc09': 'RDxLoop',
+  'a789eeb011d1e6c080006fb1e13554c7': 'RDxMajorRadius2',
+  '375c698211d16b510008a1ba32a3dc09': 'RDxMatchedEdge',
+  'b382a87c45f4ffb9fe4a7486104813a4': 'RDxMatchedLoop',
+  '5523121311d4490d6000e6ab3a39fbb0': 'RDxMateInterfaceDef',
+  'b4964e9011d1e6c080006fb1e13554c7': 'RDxMinorRadius2',
+  'fad9a9b511d2330560002cab01f31bb0': 'RDxMirrorPattern',
+  '452121b611d514d6100061a6bba647b5': 'RDxModelerTxnMgr',
+  '3e55d947407dffd912db059ae9d0ed1f': 'RDxOffsetCurve2',
+  '90874d1611d0d1f80008cabc0663dc09': 'RDxPart',
+  '90874d1111d0d1f80008cabc0663dc09': 'RDxPlanarSketch',
+  'ce52df4211d0d2d00008ccbc0663dc09': 'RDxPlane',
+  'ce52df3511d0d2d00008ccbc0663dc09': 'RDxPoint2',
+  'ce52df3e11d0d2d00008ccbc0663dc09': 'RDxPoint3',
+  '0697713111d2323260002cab01f31bb0': 'RDxPolarPattern',
+  'f9884c4311d1983d000826bd0663dc09': 'RDxProfile',
+  '2d06cad349986fa71ead34b67e52cd7b': 'RDxProjectCutEdges',
+  '671bb70011d1e068800066b1e13554c7': 'RDxRadius2',
+  '90874d2611d0d1f80008cabc0663dc09': 'RDxReal',
+  '2067324411d21dc560002aab01f31bb0': 'RDxRectangularPattern',
+  '2d86fc2642dfe34030c08ab05ef9bfc5': 'RDxReferenceEdgeLoopId',
+  '317b734611d37a7c60001cb3d1c1fbb0': 'RDxRefSpline',
+  '0b86ad43421c4a69e0e0deaab16e7154': 'RDxRefSpline3',
+  '3ae9d8da11d42c3ac000ad967a14684f': 'RDxSketch3d',
+  'ffd270b811d52d1410000897994909b5': 'RDxSketchFragment',
+  'f9372fd411d1d315000847b00524dc09': 'RDxSpline2',
+  '7c44abde11d2257a60008cb7b035c3b0': 'RDxSpline3',
+  '8f41fd2411d26eac00082aab32a3dc09': 'RDxStopNode',
+  '1fbb3c0111d2684da0009e9a3c3aa076': 'RDxString',
+  '9a94e34711d36b7fc000d49545df724f': 'RDxToolBodyCacheAttribute',
+  'ce52df4011d0d2d00008ccbc0663dc09': 'RDxVector3',
+  '3683ff4011d1e05f800066b1e13554c7': 'RDxVerticalDistance2',
+  'ea7da98811d447a26000d0b81269f1b0': 'RSeAcisEntityContainer',
+  'cc0f752111d18027e38619962259017a': 'RSeAcisEntityWrapper',
+  '60fd184511d0d79d0008bfbb21eddc09': 'SCxSketchNode',
+  'da58aa0e11d43cb1c000ae967a14684f': 'S3xSketch3dNode',
+  'fd1e899d11d635491000568ec04a0ab5': 'SMxAnalysisSetup',
+  'a529d1e211d0d0900008bcbb21eddc09': 'SMxGroupNode',
+  '022ac1b111d20d356000f99ac5361ab0': 'SMxPersistentScenePath',
+  '716b5cd148299bd2474ec788e5ab0c74': 'UCxATEntry',
+  'd48240694eb51a34aec9d789df4f97a4': 'UCxClientFeatureNode',
+  'dbe41d9111d4414c8000609a88fdf9c6': 'UCxCompInterfaceNode',
+  'ca7163a111d0d3b20008bfbb21eddc09': 'UCxComponentNode',
+  'd1071d574d61a7c4f2e352bf50116935': 'UCxConstraint3DimensionItem',
+  '7dfcc81711d6419710006eab87ae3483': 'UCxConstructionFolderEntry',
+  '475e786111d296dba0004a803603c8c9': 'UCxFeatureDimensionStateAttr',
+  '2c7020f611d1b3c06000b1b801f31bb0': 'UCxWorkaxisNode',
+  '14533d8211d1087100085ba406e5dc09': 'UCxWorkplaneNode',
+  '2c7020f811d1b3c06000b1b801f31bb0': 'UCxWorkpointNode',
+  'd31891c248bf14c3aa42ea872a846b2a': 'UFRxRef'
 }
 
-const _SURFACES = {
-  'cone': SurfaceCone,
-  'mesh': SurfaceMesh,
-  'plane': SurfacePlane,
-  'sphere': SurfaceSphere,
-  'spline': SurfaceSpline,
-  'torus': SurfaceTorus,
-  'null_surface': null
+// ============================================================================
+// Global State
+// ============================================================================
+
+let _fileVersion = 0
+let _fileBeta = -1
+let _blockSize = 0
+
+function getFileVersion() {
+  return _fileVersion
 }
 
-setCurveClasses(_CURVES)
-setSurfaceClasses(_SURFACES)
-setTransformClass(Transform)
+function setFileVersion(version) {
+  _fileVersion = version
+  _blockSize = version > 2010 ? 0 : 4
+}
+
+function getFileBeta() {
+  return _fileBeta
+}
+
+function setFileBeta(beta) {
+  _fileBeta = beta
+}
+
+function getBlockSize() {
+  return _blockSize
+}
 
 // ============================================================================
-// High-level API Functions
+// Binary Reading Functions
 // ============================================================================
 
 /**
- * Parse ACIS binary data and return bodies
+ * Get boolean value (0 or 1)
+ * @param {Uint8Array|DataView} data - Binary data
+ * @param {number} offset - Byte offset
+ * @returns {[boolean, number]} [value, newOffset]
  */
+function getBoolean(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const val = view.getUint8(offset)
+  if (val === 1) return [true, offset + 1]
+  if (val === 0) return [false, offset + 1]
+  throw new Error(`Expected either 0 or 1 but found ${val.toString(16)}`)
+}
+
+/**
+ * Get signed 8-bit integer
+ */
+function getSInt8(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getInt8(offset), offset + 1]
+}
+
+/**
+ * Get unsigned 8-bit integer
+ */
+function getUInt8(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getUint8(offset), offset + 1]
+}
+
+/**
+ * Get array of unsigned 8-bit integers
+ */
+function getUInt8A(data, offset, size) {
+  const end = offset + size
+  const arr = new Uint8Array(data.buffer || data, data.byteOffset ? data.byteOffset + offset : offset, size)
+  return [Array.from(arr), end]
+}
+
+/**
+ * Get unsigned 16-bit integer (little-endian)
+ */
+function getUInt16(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getUint16(offset, true), offset + 2]
+}
+
+/**
+ * Get array of unsigned 16-bit integers
+ */
+function getUInt16A(data, offset, size) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const arr = []
+  let i = offset
+  for (let j = 0; j < size; j++) {
+    arr.push(view.getUint16(i, true))
+    i += 2
+  }
+  return [arr, i]
+}
+
+/**
+ * Get signed 16-bit integer
+ */
+function getSInt16(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getInt16(offset, true), offset + 2]
+}
+
+/**
+ * Get array of signed 16-bit integers
+ */
+function getSInt16A(data, offset, size) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const arr = []
+  let i = offset
+  for (let j = 0; j < size; j++) {
+    arr.push(view.getInt16(i, true))
+    i += 2
+  }
+  return [arr, i]
+}
+
+/**
+ * Get unsigned 32-bit integer
+ */
+function getUInt32(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getUint32(offset, true), offset + 4]
+}
+
+/**
+ * Get array of unsigned 32-bit integers
+ */
+function getUInt32A(data, offset, size) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const arr = []
+  let i = offset
+  for (let j = 0; j < size; j++) {
+    arr.push(view.getUint32(i, true))
+    i += 4
+  }
+  return [arr, i]
+}
+
+/**
+ * Get signed 32-bit integer
+ */
+function getSInt32(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getInt32(offset, true), offset + 4]
+}
+
+/**
+ * Get array of signed 32-bit integers
+ */
+function getSInt32A(data, offset, size) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const arr = []
+  let i = offset
+  for (let j = 0; j < size; j++) {
+    arr.push(view.getInt32(i, true))
+    i += 4
+  }
+  return [arr, i]
+}
+
+/**
+ * Get unsigned 64-bit integer (as BigInt)
+ */
+function getUInt64(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getBigUint64(offset, true), offset + 8]
+}
+
+/**
+ * Get array of unsigned 64-bit integers
+ */
+function getUInt64A(data, offset, size) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const arr = []
+  let i = offset
+  for (let j = 0; j < size; j++) {
+    arr.push(view.getBigUint64(i, true))
+    i += 8
+  }
+  return [arr, i]
+}
+
+/**
+ * Get signed 64-bit integer (as BigInt)
+ */
+function getSInt64(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getBigInt64(offset, true), offset + 8]
+}
+
+/**
+ * Get array of signed 64-bit integers
+ */
+function getSInt64A(data, offset, size) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const arr = []
+  let i = offset
+  for (let j = 0; j < size; j++) {
+    arr.push(view.getBigInt64(i, true))
+    i += 8
+  }
+  return [arr, i]
+}
+
+/**
+ * Get 32-bit float
+ */
+function getFloat32(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getFloat32(offset, true), offset + 4]
+}
+
+/**
+ * Get array of 32-bit floats
+ */
+function getFloat32A(data, offset, size) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const arr = []
+  let i = offset
+  for (let j = 0; j < size; j++) {
+    arr.push(view.getFloat32(i, true))
+    i += 4
+  }
+  return [arr, i]
+}
+
+/**
+ * Get 2D point from 32-bit floats
+ */
+function getFloat32_2D(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [
+    { x: view.getFloat32(offset, true), y: view.getFloat32(offset + 4, true) },
+    offset + 8
+  ]
+}
+
+/**
+ * Get 3D point from 32-bit floats
+ */
+function getFloat32_3D(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [
+    {
+      x: view.getFloat32(offset, true),
+      y: view.getFloat32(offset + 4, true),
+      z: view.getFloat32(offset + 8, true)
+    },
+    offset + 12
+  ]
+}
+
+/**
+ * Get 64-bit float (double)
+ */
+function getFloat64(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [view.getFloat64(offset, true), offset + 8]
+}
+
+/**
+ * Get array of 64-bit floats
+ */
+function getFloat64A(data, offset, size) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const arr = []
+  let i = offset
+  for (let j = 0; j < size; j++) {
+    arr.push(view.getFloat64(i, true))
+    i += 8
+  }
+  return [arr, i]
+}
+
+/**
+ * Get 2D vector from 64-bit floats (with z=0)
+ */
+function getFloat64_2D(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [
+    {
+      x: view.getFloat64(offset, true),
+      y: view.getFloat64(offset + 8, true),
+      z: 0
+    },
+    offset + 16
+  ]
+}
+
+/**
+ * Get 3D vector from 64-bit floats
+ */
+function getFloat64_3D(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  return [
+    {
+      x: view.getFloat64(offset, true),
+      y: view.getFloat64(offset + 8, true),
+      z: view.getFloat64(offset + 16, true)
+    },
+    offset + 24
+  ]
+}
+
+// ============================================================================
+// Color Class
+// ============================================================================
+
+class Color {
+  constructor(red, green, blue, alpha = 1.0) {
+    this.red = red
+    this.green = green
+    this.blue = blue
+    this.alpha = alpha
+  }
+
+  getRGB() {
+    return [this.red, this.green, this.blue]
+  }
+
+  getRGBA() {
+    return [this.red, this.green, this.blue, this.alpha]
+  }
+
+  toString() {
+    const r = Math.round(this.red * 255)
+    const g = Math.round(this.green * 255)
+    const b = Math.round(this.blue * 255)
+    const a = Math.round(this.alpha * 255)
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${a.toString(16).padStart(2, '0')}`
+  }
+}
+
+/**
+ * Get RGBA color from 4 floats
+ */
+function getColorRGBA(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const r = view.getFloat32(offset, true)
+  const g = view.getFloat32(offset + 4, true)
+  const b = view.getFloat32(offset + 8, true)
+  const a = view.getFloat32(offset + 12, true)
+  return [new Color(r, g, b, a), offset + 16]
+}
+
+// ============================================================================
+// UID Class
+// ============================================================================
+
+class UID {
+  constructor(options = {}) {
+    if (options.bytes_le) {
+      const b = options.bytes_le
+      this.timeLow = (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | b[0]
+      this.val1 = (b[5] << 8) | b[4]
+      this.val2 = (b[7] << 8) | b[6]
+      this.val3 = (b[8] << 8) | b[9]
+      // val4 is 6 bytes (48 bits)
+      this.val4 = BigInt(b[10]) << 40n |
+                  BigInt(b[11]) << 32n |
+                  BigInt(b[12]) << 24n |
+                  BigInt(b[13]) << 16n |
+                  BigInt(b[14]) << 8n |
+                  BigInt(b[15])
+    } else if (options.str) {
+      const vals = options.str.split('-')
+      this.timeLow = parseInt(vals[0], 16)
+      this.val1 = parseInt(vals[1], 16)
+      this.val2 = parseInt(vals[2], 16)
+      this.val3 = parseInt(vals[3], 16)
+      this.val4 = BigInt('0x' + vals[4])
+    } else {
+      this.timeLow = 0
+      this.val1 = 0
+      this.val2 = 0
+      this.val3 = 0
+      this.val4 = 0n
+    }
+  }
+
+  get hex() {
+    return `${this.timeLow.toString(16).padStart(8, '0')}${this.val1.toString(16).padStart(4, '0')}${this.val2.toString(16).padStart(4, '0')}${this.val3.toString(16).padStart(4, '0')}${this.val4.toString(16).padStart(12, '0')}`
+  }
+
+  toString() {
+    return `${this.timeLow.toString(16).toUpperCase().padStart(8, '0')}-${this.val1.toString(16).toUpperCase().padStart(4, '0')}-${this.val2.toString(16).toUpperCase().padStart(4, '0')}-${this.val3.toString(16).toUpperCase().padStart(4, '0')}-${this.val4.toString(16).toUpperCase().padStart(12, '0')}`
+  }
+
+  equals(other) {
+    if (other instanceof UID) {
+      return this.timeLow === other.timeLow &&
+             this.val1 === other.val1 &&
+             this.val2 === other.val2 &&
+             this.val3 === other.val3 &&
+             this.val4 === other.val4
+    }
+    return false
+  }
+}
+
+/**
+ * Get UUID from binary data
+ */
+function getUUID(data, offset) {
+  const bytes = data instanceof Uint8Array
+    ? data.slice(offset, offset + 16)
+    : new Uint8Array(data.buffer || data, offset, 16)
+  return [new UID({ bytes_le: bytes }), offset + 16]
+}
+
+/**
+ * Get DateTime from binary data (Windows FILETIME)
+ */
+function getDateTime(data, offset) {
+  const view = data instanceof DataView ? data : new DataView(data.buffer, data.byteOffset, data.byteLength)
+  const val = view.getBigUint64(offset, true)
+  if (val !== 0n) {
+    // Convert from Windows FILETIME (100-nanosecond intervals since 1601-01-01)
+    // to JavaScript Date
+    const milliseconds = Number(val / 10000n) - 11644473600000
+    return [new Date(milliseconds), offset + 8]
+  }
+  return [null, offset + 8]
+}
+
+// ============================================================================
+// Text Reading Functions
+// ============================================================================
+
+const ENCODING_FS = 'utf-8'
+
+/**
+ * Get text string with specified length
+ */
+function getText8(data, offset, length) {
+  const bytes = data instanceof Uint8Array
+    ? data.slice(offset, offset + length)
+    : new Uint8Array(data.buffer || data, offset, length)
+
+  const decoder = new TextDecoder(ENCODING_FS)
+  let txt = decoder.decode(bytes)
+
+  // Remove trailing null or newline
+  if (txt.endsWith('\0')) txt = txt.slice(0, -1)
+  if (txt.endsWith('\n')) txt = txt.slice(0, -1)
+
+  return [txt, offset + length]
+}
+
+/**
+ * Get 8-bit length prefixed text
+ */
+function getLen8Text8(data, offset) {
+  const [length, i] = getUInt8(data, offset)
+  return getText8(data, i, length)
+}
+
+/**
+ * Get 32-bit length prefixed 8-bit text
+ */
+function getLen32Text8(data, offset) {
+  const [length, i] = getUInt32(data, offset)
+  return getText8(data, i, length)
+}
+
+/**
+ * Get 32-bit length prefixed 16-bit (UTF-16LE) text
+ */
+function getLen32Text16(data, offset) {
+  const [length, i] = getUInt32(data, offset)
+  const end = i + 2 * length
+  const bytes = data instanceof Uint8Array
+    ? data.slice(i, end)
+    : new Uint8Array(data.buffer || data, i, 2 * length)
+
+  const decoder = new TextDecoder('utf-16le')
+  let txt = decoder.decode(bytes)
+
+  // Remove trailing null or newline
+  if (txt.endsWith('\0')) txt = txt.slice(0, -1)
+  if (txt.endsWith('\n')) txt = txt.slice(0, -1)
+
+  return [txt, end]
+}
+
+/**
+ * Get UID text name from UUID_NAMES mapping
+ */
+function getUidText(uid) {
+  const hex = uid.hex
+  return UUID_NAMES[hex] || uid.toString()
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Convert float array to string
+ */
+function floatArr2Str(arr) {
+  return arr.map(f => f.toPrecision(6)).join(', ')
+}
+
+/**
+ * Convert int array to hex string
+ */
+function intArr2Str(arr, width = 2) {
+  return arr.map(h => h.toString(16).toUpperCase().padStart(width, '0')).join(',')
+}
+
+/**
+ * Convert 2D int array to string
+ */
+function int2DArr2Str(arr, width = 2) {
+  return arr.map(a => '[' + a.map(h => h.toString(16).toUpperCase().padStart(width, '0')).join(',') + ']').join(',')
+}
+
+/**
+ * Check if value is a string
+ */
+function isString(value) {
+  return typeof value === 'string'
+}
+
+/**
+ * Check if two vectors are approximately equal
+ */
+function isEqual(a, b, epsilon = 0.0001) {
+  if (a === null || a === undefined) return isEqual({ x: 0, y: 0, z: 0 }, b, epsilon)
+  if (b === null || b === undefined) return isEqual(a, { x: 0, y: 0, z: 0 }, epsilon)
+  const dx = a.x - b.x
+  const dy = a.y - b.y
+  const dz = a.z - b.z
+  return Math.sqrt(dx * dx + dy * dy + dz * dz) < epsilon
+}
+
+/**
+ * Check if two numbers are approximately equal
+ */
+function isEqual1D(a, b, epsilon = 0.0001) {
+  if (a === null || a === undefined) return isEqual1D(0, b, epsilon)
+  if (b === null || b === undefined) return isEqual1D(a, 0, epsilon)
+  return Math.abs(a - b) < epsilon
+}
+
+/**
+ * Check if stream name indicates embeddings
+ */
+function isEmbeddings(names) {
+  return names.includes('RSeEmbeddings')
+}
+
+/**
+ * Reshape flat array into 2D array
+ */
+function reshape(nums, size) {
+  if (size === 1) return nums
+  const result = []
+  for (let i = 0; i < nums.length; i += size) {
+    result.push(nums.slice(i, i + size))
+  }
+  return result
+}
+
+// ============================================================================
+// Default Export
+// ============================================================================
+
+
+  // ============================================================================
+  // importer-constants.js
+  // ============================================================================
+
+/**
+ * Inventor Loader Constants
+ * Ported from importerConstants.py
+ */
+
+// ============================================================================
+// Reference Types
+// ============================================================================
+
+const REF_CROSS = 1
+const REF_CHILD = 2
+const REF_PARENT = 3
+
+// ============================================================================
+// Value Types
+// ============================================================================
+
+const VAL_GUESS = 0
+const VAL_UINT8 = 1
+const VAL_UINT16 = 2
+const VAL_UINT32 = 3
+const VAL_UINT64 = 4
+const VAL_REF = 5
+const VAL_STR8 = 6
+const VAL_STR16 = 7
+const VAL_DATETIME = 8
+const VAL_ENUM = 9
+
+// ============================================================================
+// Value Format Strings
+// ============================================================================
+
+const VAL_FORMAT = {
+  [VAL_GUESS]: '%s',
+  [VAL_UINT8]: '%02X',
+  [VAL_UINT16]: '%03X',
+  [VAL_UINT32]: '%04X',
+  [VAL_UINT64]: '%05X',
+  [VAL_STR8]: "'%s'",
+  [VAL_STR16]: '"%s"',
+  [VAL_DATETIME]: '#%s#',
+  [VAL_ENUM]: '%s'
+}
+
+// ============================================================================
+// Angle Constants
+// ============================================================================
+
+const MIN_0 = 0.0
+const MIN_PI = -Math.PI
+const MIN_PI2 = -Math.PI / 2
+const MIN_INF = -Infinity
+
+const MAX_2PI = 2 * Math.PI
+const MAX_PI = Math.PI
+const MAX_PI2 = Math.PI / 2
+const MAX_INF = Infinity
+const MAX_LEN = 2e100
+
+// ============================================================================
+// Direction Constants
+// ============================================================================
+
+const CENTER = { x: 0, y: 0, z: 0 }
+const DIR_X = { x: 1, y: 0, z: 0 }
+const DIR_Y = { x: 0, y: 1, z: 0 }
+const DIR_Z = { x: 0, y: 0, z: 1 }
+
+// ============================================================================
+// File Encoding
+// ============================================================================
+
+const ENCODING_FS = 'utf-8'
+
+// ============================================================================
+// Epsilon for floating point comparisons
+// ============================================================================
+
+const EPS = 1.0e-6
+
+// ============================================================================
+// Segment Type IDs
+// ============================================================================
+
+const SEG_APP = 'AppSegmentType'
+const SEG_APP_AM = 'AmAppSegmentType'
+const SEG_APP_PM = 'PmAppSegmentType'
+const SEG_BREP_AM = 'AmBREPSegmentType'
+const SEG_BREP_MB = 'MbBrepSegmentType'
+const SEG_BREP_PM = 'PmBrepSegmentType'
+const SEG_BROWSER_AM = 'AmBRxSegmentType'
+const SEG_BROWSER_DL = 'DlBRxSegmentType'
+const SEG_BROWSER_DX = 'DxBRxSegmentType'
+const SEG_BROWSER_PM = 'PmBRxSegmentType'
+const SEG_BROWSER_PM_OLD = 'PmBrowserSegment'
+const SEG_DC_AM = 'AmDcSegmentType'
+const SEG_DC_DL = 'DlDocDcSegmentType'
+const SEG_DC_DX = 'DxDcSegmentType'
+const SEG_DC_PM = 'PmDcSegmentType'
+const SEG_DESIGN_VIEW = 'FWxDesignViewType'
+const SEG_DESIGN_VIEW_MGR = 'FWxDesignViewManagerType'
+const SEG_DIRECTORY_DL = 'DlDirectorySegmentType'
+const SEG_EE_DATA = 'EeDataSegmentType'
+const SEG_EE_SCENE = 'EeSceneSegmentType'
+const SEG_FB_ATTRIBUTE = 'FBAttributeSegment'
+const SEG_GRAPHICS_AM = 'AmGRxSegmentType'
+const SEG_GRAPHICS_MB = 'MbGRxSegmentType'
+const SEG_GRAPHICS_PM = 'PmGRxSegmentType'
+const SEG_NOTEBOOK = 'NotebookSegmentType'
+const SEG_RESULT_AM = 'AmRxSegmentType'
+const SEG_RESULT_PM = 'PmResultSegmentType'
+const SEG_SHEET_DC_DL = 'DlSheetDcSegmentType'
+const SEG_SHEET_DL_DL = 'DlSheetDlSegmentType'
+const SEG_SHEET_SM_DL = 'DlSheetSmSegmentType'
+
+// ============================================================================
+// Segment Type Collections
+// ============================================================================
+
+const SEGMENTS_APP = [SEG_APP, SEG_APP_AM, SEG_APP_PM]
+const SEGMENTS_BRP = [SEG_BREP_AM, SEG_BREP_MB, SEG_BREP_PM]
+const SEGMENTS_BRX = [SEG_BROWSER_AM, SEG_BROWSER_DL, SEG_BROWSER_DX, SEG_BROWSER_PM]
+const SEGMENTS_DOC = [SEG_DC_AM, SEG_DC_DL, SEG_DC_DX, SEG_DC_PM]
+const SEGMENTS_DVW = [SEG_DESIGN_VIEW, SEG_DESIGN_VIEW_MGR]
+const SEGMENTS_DIR = [SEG_DIRECTORY_DL]
+const SEGMENTS_EED = [SEG_EE_DATA]
+const SEGMENTS_EES = [SEG_EE_SCENE]
+const SEGMENTS_FBA = [SEG_FB_ATTRIBUTE]
+const SEGMENTS_GRX = [SEG_GRAPHICS_AM, SEG_GRAPHICS_MB, SEG_GRAPHICS_PM]
+const SEGMENTS_NTB = [SEG_NOTEBOOK]
+const SEGMENTS_RSX = [SEG_RESULT_AM, SEG_RESULT_PM]
+const SEGMENTS_SHT = [SEG_SHEET_DC_DL, SEG_SHEET_DL_DL, SEG_SHEET_SM_DL]
+
+// ============================================================================
+// Constraint Types (F3D)
+// ============================================================================
+
+const CONSTRAINT_TYPE = {
+  0x00000000001: 'Coincident',
+  0x00000000002: 'Colinear',
+  0x00000000004: 'Concentric',
+  0x00000000010: 'Parallel',
+  0x00000000020: 'Perpendicular',
+  0x00000000040: 'Horizontal',
+  0x00000000080: 'Vertical',
+  0x00000000100: 'Tangential',
+  0x00000000200: 'Curvature',
+  0x00000000400: 'Symmetry',
+  0x00000000800: 'Equal',
+  0x00000001000: 'Midpoint',
+  0x00000002000: 'Polygon',
+  0x00010000000: 'Pattern_Circular',
+  0x00020000000: 'Pattern_Rect',
+  0x10000000000: 'Text_Frame',
+  0x20000000000: 'Text_Path'
+}
+
+// ============================================================================
+// Mathematical Functions
+// ============================================================================
+
+const Functions = [
+  '',
+  'cos',
+  'sin',
+  'tan',
+  'acos',
+  'asin',
+  'atan',
+  'cosh',
+  'sinh',
+  'tanh',
+  'sqrt',
+  'exp',
+  'pow',
+  'log',
+  'log10',
+  'floor',
+  'ceil',
+  'round',
+  'abs',
+  'sign',
+  'max',
+  'min',
+  'random',
+  'acosh',
+  'asinh',
+  'atanh',
+  'isolate'
+]
+
+const FunctionsNotSupported = ['sign', 'random', 'acosh', 'asinh', 'atanh', 'isolate']
+
+// ============================================================================
+// Tolerances
+// ============================================================================
+
+const Tolerances = {
+  NOMINAL: 0,
+  LOWER: 1,
+  UPPER: 2,
+  MEDIAN: 3
+}
+
+// ============================================================================
+// DbInterface Type Mapping
+// ============================================================================
+
+const DB_INTERFACE_TYPE_MAPPING = {
+  0x01: 'BOOL',
+  0x04: 'SINT',
+  0x10: 'UUID',
+  0x30: 'FLOAT[]',
+  0x54: 'MAP'
+}
+
+// ============================================================================
+// Default Export
+// ============================================================================
+
+
+
+  // ============================================================================
+  // Class Mappings Initialization (from index.js)
+  // ============================================================================
+
+  // Initialize spline.js with class mappings
+  setCurveClasses({
+    'degenerate': CurveDegenerate,
+    'ellipse': CurveEllipse,
+    'intcurve': CurveInt,
+    'pcurve': CurveP,
+    'straight': CurveStraight,
+    'compcurv': CurveComp,
+    'intcurve-intcurve': CurveIntInt,
+    'null_curve': null,
+    'null_pcurve': null
+  })
+
+  setSurfaceClasses({
+    'cone': SurfaceCone,
+    'mesh': SurfaceMesh,
+    'plane': SurfacePlane,
+    'sphere': SurfaceSphere,
+    'spline': SurfaceSpline,
+    'torus': SurfaceTorus,
+    'null_surface': null
+  })
+
+  setTransformClass(Transform)
+
+
+  // ============================================================================
+  // High-level API
+  // ============================================================================
+
+  /**
+   * Parse ACIS binary data and return bodies
+   */
 function parseAcisBinary(data) {
   const reader = new AcisReader()
   if (!reader.readBinary(data)) {
@@ -9776,12 +10675,9 @@ function parseAcis(data) {
 function getAllFaces(bodies) {
   const faces = []
   for (const body of bodies) {
-    const lumps = body.getLumps ? body.getLumps() : []
-    for (const lump of lumps) {
-      const shells = lump.getShells ? lump.getShells() : []
-      for (const shell of shells) {
-        const shellFaces = shell.getFaces ? shell.getFaces() : []
-        faces.push(...shellFaces)
+    for (const lump of body.getLumps()) {
+      for (const shell of lump.getShells()) {
+        faces.push(...shell.getFaces())
       }
     }
   }
@@ -9796,17 +10692,12 @@ function getAllEdges(bodies) {
   const seen = new Set()
 
   for (const body of bodies) {
-    const lumps = body.getLumps ? body.getLumps() : []
-    for (const lump of lumps) {
-      const shells = lump.getShells ? lump.getShells() : []
-      for (const shell of shells) {
-        const faces = shell.getFaces ? shell.getFaces() : []
-        for (const face of faces) {
-          const loops = face.getLoops ? face.getLoops() : []
-          for (const loop of loops) {
-            const coedges = loop.getCoedges ? loop.getCoedges() : []
-            for (const coedge of coedges) {
-              const edge = coedge.getEdge ? coedge.getEdge() : null
+    for (const lump of body.getLumps()) {
+      for (const shell of lump.getShells()) {
+        for (const face of shell.getFaces()) {
+          for (const loop of face.getLoops()) {
+            for (const coedge of loop.getCoedges()) {
+              const edge = coedge.getEdge()
               if (edge && !seen.has(edge.index)) {
                 seen.add(edge.index)
                 edges.push(edge)
@@ -9819,6 +10710,23 @@ function getAllEdges(bodies) {
   }
   return edges
 }
+
+/**
+ * Extract color from entity attribute chain
+ */
+
+// ============================================================================
+// Default Export
+// ============================================================================
+
+// ============================================================================
+// F3D Importer Functions (from importer-f3d.js)
+// ============================================================================
+
+// F3D state
+let f3dSmbFiles = []
+let f3dBulkData = null
+let f3dMetaData = null
 
 /**
  * Find the start of ACIS data in SMB/SMBH files
@@ -9837,33 +10745,241 @@ function findACISDataStart(data) {
 }
 
 /**
- * Parse F3D file (Fusion 360 ZIP format)
+ * Find ACIS header in data
+ */
+function findACISHeader(data) {
+  const view = data instanceof Uint8Array ? data : new Uint8Array(data)
+  for (let i = 0; i < Math.min(4096, view.length - 15); i++) {
+    const chunk = new TextDecoder().decode(view.slice(i, i + 15))
+    if (chunk.startsWith('ACIS BinaryFile') || chunk.startsWith('ASM BinaryFile')) {
+      return i
+    }
+  }
+  return -1
+}
+
+/**
+ * Check if data is a valid ZIP file
+ */
+function isZipFile(data) {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
+  return bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04
+}
+
+/**
+ * Parse manifest item
+ */
+function getF3DManifestItem(data, offset) {
+  let i = offset
+  let t1, t2, t3, t4
+  ;[t1, i] = getLen32Text16(data, i)
+  ;[t2, i] = getLen32Text16(data, i)
+  ;[t3, i] = getLen32Text16(data, i)
+  ;[t4, i] = getLen32Text16(data, i)
+  let [a1, newI] = getUInt32A(data, i, 4)
+  i = newI
+  let [cnt] = getUInt32(data, i)
+  i += 4
+  const a2 = {}
+  for (let j = 0; j < cnt; j++) {
+    let k, v
+    ;[k, i] = getLen32Text16(data, i)
+    ;[v, i] = getLen32Text16(data, i)
+    a2[k] = v
+  }
+  return [{ t1, t2, t3, t4, a1, a2 }, i]
+}
+
+/**
+ * Parse manifest items array
+ */
+function getF3DManifestItems(data, offset) {
+  const a = []
+  let i = offset
+  let [n1] = getUInt8(data, i)
+  i += 1
+  if (n1) {
+    let [cnt] = getUInt32(data, i)
+    i += 4
+    for (let j = 0; j < cnt; j++) {
+      let mi
+      ;[mi, i] = getF3DManifestItem(data, i)
+      a.push(mi)
+    }
+  }
+  return [a, i]
+}
+
+/**
+ * Read and parse manifest.dat from F3D archive
+ */
+async function readF3DManifest(f3d, path) {
+  const name = path.split('/').pop()
+  if (!name) return ''
+  const file = f3d.file(path)
+  if (!file) {
+    throw new Error('Manifest not found at ' + path)
+  }
+  const buffer = await file.async('arraybuffer')
+  const data = new Uint8Array(buffer)
+  let i = 0
+  let t1, t2, t3, t4, t5, t6, t7, t8
+  ;[t1, i] = getLen32Text8(data, i)
+  ;[t2, i] = getLen32Text8(data, i)
+  ;[t3, i] = getLen32Text16(data, i)
+  ;[t4, i] = getLen32Text16(data, i)
+  ;[t5, i] = getLen32Text16(data, i)
+  ;[t6, i] = getLen32Text16(data, i)
+  ;[t7, i] = getLen32Text16(data, i)
+  let [a1] = getUInt32A(data, i, 2)
+  i += 8
+  let [cnt] = getUInt32(data, i)
+  i += 4
+  const l1 = []
+  for (let j = 0; j < cnt; j++) {
+    let t
+    ;[t, i] = getLen32Text8(data, i)
+    let [v] = getUInt32(data, i)
+    i += 4
+    l1.push([t, v])
+  }
+  ;[cnt] = getUInt32(data, i)
+  i += 4
+  const l2 = []
+  for (let j = 0; j < cnt; j++) {
+    let t
+    ;[t, i] = getLen32Text16(data, i)
+    l2.push(t)
+  }
+  let l3
+  ;[l3, i] = getF3DManifestItems(data, i)
+  ;[t8, i] = getLen32Text16(data, i)
+  let [n1] = getUInt32(data, i)
+  i += 4
+  let folder
+  ;[folder, i] = getLen32Text16(data, i)
+  return folder
+}
+
+/**
+ * Process SMB file from F3D archive
+ */
+async function processF3DSMB(f3d, path) {
+  const name = path.split('/').pop()
+  if (!name) return false
+  const file = f3d.file(path)
+  if (!file) {
+    console.warn('SMB file not found: ' + path)
+    return false
+  }
+  const buffer = await file.async('arraybuffer')
+  const data = new Uint8Array(buffer)
+  f3dSmbFiles.push({ name, data, isRaw: true })
+  return true
+}
+
+/**
+ * Read F3D file and extract structure
+ */
+async function readF3D(fileData, JSZip) {
+  f3dSmbFiles = []
+  f3dBulkData = null
+  f3dMetaData = null
+
+  const data = fileData instanceof Uint8Array ? fileData : new Uint8Array(fileData)
+  if (!isZipFile(data)) {
+    throw new Error('Not a valid F3D/ZIP file')
+  }
+
+  const f3d = await JSZip.loadAsync(data)
+  const folder = await readF3DManifest(f3d, 'Manifest.dat')
+
+  const folderPreview = folder + '[Active]/Previews/'
+  const folderBreps = folder + '[Active]/Breps.BlobParts/'
+  const fileBulk = folder + '[Active]/Design1/BulkStream.dat'
+  const fileMeta = folder + '[Active]/Design1/MetaStream.dat'
+
+  const result = {
+    folder: folder,
+    thumbnail: null,
+    smbFiles: [],
+    bulkData: null,
+    metaData: null
+  }
+
+  const fileNames = Object.keys(f3d.files)
+  for (const name of fileNames) {
+    if (name.startsWith(folderPreview)) {
+      const thumbFile = f3d.file(name)
+      if (thumbFile) {
+        const buf = await thumbFile.async('arraybuffer')
+        result.thumbnail = new Uint8Array(buf)
+      }
+    } else if (name.startsWith(folderBreps)) {
+      await processF3DSMB(f3d, name)
+    }
+  }
+
+  try {
+    const bulkFile = f3d.file(fileBulk)
+    if (bulkFile) {
+      const buffer = await bulkFile.async('arraybuffer')
+      f3dBulkData = new Uint8Array(buffer)
+      result.bulkData = f3dBulkData
+    }
+  } catch (e) {}
+
+  try {
+    const metaFile = f3d.file(fileMeta)
+    if (metaFile) {
+      const buffer = await metaFile.async('arraybuffer')
+      f3dMetaData = new Uint8Array(buffer)
+      result.metaData = f3dMetaData
+    }
+  } catch (e) {}
+
+  result.smbFiles = f3dSmbFiles
+  return result
+}
+
+/**
+ * Parse F3D file (main entry point)
  */
 async function parseF3D(arrayBuffer, loadJSZip) {
   const JSZip = await loadJSZip()
-  const zip = await JSZip.loadAsync(arrayBuffer)
-  const files = Object.keys(zip.files)
-
-  const smbFiles = files.filter(f =>
-    f.toLowerCase().endsWith('.smb') || f.toLowerCase().endsWith('.smbh')
-  )
-
-  if (smbFiles.length === 0) {
-    throw new Error('No ACIS binary data (.smb/.smbh) found in F3D file')
-  }
+  const f3dData = await readF3D(arrayBuffer, JSZip)
 
   const allBodies = []
 
-  for (const smbFile of smbFiles) {
+  for (const smb of f3dData.smbFiles) {
     try {
-      const smbData = await zip.file(smbFile).async('arraybuffer')
-      console.log('Parsing ' + smbFile + ': ' + smbData.byteLength + ' bytes')
+      console.log('Parsing ' + smb.name + ': ' + smb.data.byteLength + ' bytes')
 
-      const bodies = parseAcisBinary(new Uint8Array(smbData))
+      // Check if this is direct ACIS format or has a wrapper
+      const headerStr = new TextDecoder().decode(smb.data.slice(0, 15))
+      let dataToparse = smb.data
+
+      if (!headerStr.startsWith('ACIS BinaryFile') && !headerStr.startsWith('ASM BinaryFile')) {
+        // Try to find ACIS data start
+        const acisStart = findACISDataStart(smb.data)
+        if (acisStart > 0) {
+          console.log('  Found ACIS data at offset ' + acisStart)
+          dataToparse = smb.data.slice(acisStart)
+        } else {
+          // Try to find ACIS header marker
+          const foundOffset = findACISHeader(smb.data)
+          if (foundOffset >= 0) {
+            console.log('  Found ACIS header at offset ' + foundOffset)
+            dataToparse = smb.data.slice(foundOffset)
+          }
+        }
+      }
+
+      const bodies = parseAcisBinary(dataToparse)
       console.log('  Found ' + bodies.length + ' bodies')
       allBodies.push(...bodies)
     } catch (e) {
-      console.warn('Failed to parse ' + smbFile + ':', e.message)
+      console.warn('Failed to parse ' + smb.name + ':', e.message)
       console.warn(e.stack)
     }
   }
@@ -9875,8 +10991,64 @@ async function parseF3D(arrayBuffer, loadJSZip) {
   return allBodies
 }
 
-// Note: Geometry conversion functions (convertACISSurface, convertACISCurve, etc.)
-// are now defined in geometry-builder.js which is included in the bundle above.
+/**
+ * Import F3D file and build geometry using OpenCascade.js
+ */
+async function importF3D(fileData, oc, loadJSZip, options) {
+  options = options || {}
+  const JSZip = await loadJSZip()
+  const f3dData = await readF3D(fileData, JSZip)
+
+  const results = {
+    folder: f3dData.folder,
+    thumbnail: f3dData.thumbnail,
+    shapes: [],
+    errors: []
+  }
+
+  for (const smb of f3dData.smbFiles) {
+    try {
+      console.log('Processing ' + smb.name + ': ' + smb.data.byteLength + ' bytes')
+
+      // Find ACIS data
+      const headerStr = new TextDecoder().decode(smb.data.slice(0, 15))
+      let dataToparse = smb.data
+
+      if (!headerStr.startsWith('ACIS BinaryFile') && !headerStr.startsWith('ASM BinaryFile')) {
+        const acisStart = findACISDataStart(smb.data)
+        if (acisStart > 0) {
+          dataToparse = smb.data.slice(acisStart)
+        } else {
+          const foundOffset = findACISHeader(smb.data)
+          if (foundOffset >= 0) {
+            dataToparse = smb.data.slice(foundOffset)
+          }
+        }
+      }
+
+      // Parse and resolve ACIS data
+      const reader = new AcisReader()
+      if (reader.readBinary(dataToparse)) {
+        reader.resolveEntities(RECORD_2_ENTITY)
+
+        for (const body of reader.bodies || []) {
+          try {
+            const shape = convertACISBody(oc, body)
+            if (shape) {
+              results.shapes.push({ name: smb.name, shape: shape })
+            }
+          } catch (e) {
+            results.errors.push({ name: smb.name, error: e.message })
+          }
+        }
+      }
+    } catch (e) {
+      results.errors.push({ name: smb.name, error: e.message })
+    }
+  }
+
+  return results
+}
 
 // ============================================================================
 // Export to global
@@ -9885,6 +11057,8 @@ async function parseF3D(arrayBuffer, loadJSZip) {
 global.ACIS = {
   // Reader
   AcisReader,
+  Header,
+  Record,
   RECORD_2_ENTITY,
 
   // Parsing functions
@@ -9892,15 +11066,19 @@ global.ACIS = {
   parseAcisBinary,
   parseAcisText,
   parseF3D,
+  importF3D,
+  readF3D,
+  isZipFile,
 
-  // Entity traversal
+  // Utility functions
   getAllFaces,
   getAllEdges,
   extractColor,
   extractName,
   findACISDataStart,
+  findACISHeader,
 
-  // Classes
+  // Classes (for instanceof checks)
   Entity, Body, Lump, Shell, Face, Loop, CoEdge, Edge, Vertex,
   Curve, CurveStraight, CurveEllipse, CurveInt,
   Surface, SurfacePlane, SurfaceCone, SurfaceSphere, SurfaceTorus, SurfaceSpline,
@@ -9914,7 +11092,6 @@ global.ACIS = {
 
   // Geometry builder functions
   makePoint,
-  makePoint2d,
   makeDirection,
   makeVec,
   makeAx1,
@@ -9924,7 +11101,6 @@ global.ACIS = {
   createCircle,
   createEllipse,
   createBSplineCurve,
-  createBSplineCurve2d,
   createBSplineSurface,
   createPlaneSurface,
   createCylindricalSurface,
@@ -9932,23 +11108,32 @@ global.ACIS = {
   createSphericalSurface,
   createToroidalSurface,
   createFaceFromSurface,
-  createEdgeFromCurve
+  createEdgeFromCurve,
+  convertACISSurface,
+  convertACISCurve,
+  convertACISEdge,
+  convertACISLoop,
+  convertACISFace,
+  convertACISShell,
+  convertACISBody,
+  convertACISBodiesToShape
 }
 
-// ACISParser for backwards compatibility
+// Also expose as ACISParser for backwards compatibility
 global.ACISParser = {
-  parseF3D: parseF3D
+  parseF3D: parseF3D,
+  importF3D: importF3D
 }
 
 // ACISGeometry for OpenCascade.js conversion
 global.ACISGeometry = {
-  convertACISBody,
-  convertACISBodiesToShape,
-  convertACISSurface,
-  convertACISCurve,
-  convertACISEdge,
-  convertACISFace,
-  convertACISShell
+  convertACISBody: convertACISBody,
+  convertACISBodiesToShape: convertACISBodiesToShape,
+  convertACISSurface: convertACISSurface,
+  convertACISCurve: convertACISCurve,
+  convertACISEdge: convertACISEdge,
+  convertACISFace: convertACISFace,
+  convertACISShell: convertACISShell
 }
 
 })(typeof self !== 'undefined' ? self : this)

@@ -193,10 +193,8 @@ async function processSMB(f3d, path, acisReader = null) {
       reader.name = name
 
       if (reader.readBinary()) {
-        // Only store non-SMB files (SAB files)
-        if (!name.toLowerCase().endsWith('.smb')) {
-          smbFiles.push(reader)
-        }
+        // Store parsed reader for geometry building
+        smbFiles.push(reader)
         return true
       }
     } catch (e) {
@@ -366,12 +364,22 @@ export async function importF3D(fileData, oc, options = {}) {
   })
 
   // Import geometry builder
-  let buildBody
+  let convertACISBody, convertACISBodiesToShape
   try {
     const geoModule = await import('./geometry-builder.js')
-    buildBody = geoModule.buildBody
+    convertACISBody = geoModule.convertACISBody
+    convertACISBodiesToShape = geoModule.convertACISBodiesToShape
   } catch (e) {
     console.warn('Geometry builder not available:', e)
+  }
+
+  // Import type mappings for entity resolution
+  let RECORD_2_ENTITY
+  try {
+    const typeMappings = await import('./type-mappings.js')
+    RECORD_2_ENTITY = typeMappings.RECORD_2_ENTITY
+  } catch (e) {
+    console.warn('Type mappings not available:', e)
   }
 
   const results = {
@@ -381,7 +389,7 @@ export async function importF3D(fileData, oc, options = {}) {
   }
 
   // Build geometry from SMB files
-  if (buildBody && oc) {
+  if (convertACISBody && oc && RECORD_2_ENTITY) {
     for (const smb of f3dData.smbFiles) {
       if (smb.isRaw) {
         // Raw data, need to parse first
@@ -389,9 +397,13 @@ export async function importF3D(fileData, oc, options = {}) {
           try {
             const reader = new AcisReader(smb.data)
             if (reader.readBinary()) {
-              for (const body of Object.values(reader.bodies || {})) {
+              // CRITICAL: Resolve entity references before accessing bodies
+              reader.resolveEntities(RECORD_2_ENTITY)
+
+              // reader.bodies is an array of resolved body entities
+              for (const body of reader.bodies || []) {
                 try {
-                  const shape = buildBody(oc, body)
+                  const shape = convertACISBody(oc, body)
                   if (shape) {
                     results.shapes.push({
                       name: smb.name,
@@ -414,10 +426,15 @@ export async function importF3D(fileData, oc, options = {}) {
           }
         }
       } else {
-        // Already parsed ACIS data
-        for (const body of Object.values(smb.bodies || {})) {
+        // Already parsed ACIS data - resolve entities if not done
+        if (!smb.resolved && RECORD_2_ENTITY) {
+          smb.resolveEntities(RECORD_2_ENTITY)
+        }
+
+        // smb.bodies is an array of resolved body entities
+        for (const body of smb.bodies || []) {
           try {
-            const shape = buildBody(oc, body)
+            const shape = convertACISBody(oc, body)
             if (shape) {
               results.shapes.push({
                 name: smb.name,

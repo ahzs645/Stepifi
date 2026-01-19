@@ -370,6 +370,23 @@ async function handleConvert(data) {
 
   postProgress(`Writing ${actualFormat.toUpperCase()} file...`)
 
+  // STL export requires the shape to be meshed/triangulated first
+  if (actualFormat === 'stl') {
+    postProgress('Meshing geometry for STL export...')
+    try {
+      const meshParams = new oc.BRepMesh_IncrementalMesh_2(
+        finalShape,
+        tolerance, // linear deflection
+        false, // relative
+        0.5, // angular deflection
+        false // parallel
+      )
+      meshParams.Perform(new oc.Message_ProgressRange_1())
+    } catch (meshErr) {
+      console.warn('Meshing step warning:', meshErr.message)
+    }
+  }
+
   try {
     writeOutput(oc, finalShape, actualFormat, outputPath)
 

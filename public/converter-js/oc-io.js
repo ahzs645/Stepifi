@@ -174,14 +174,10 @@ export function readStl(oc, filePath) {
  */
 export function writeOutput(oc, shape, format, filePath) {
   if (format === 'stl') {
-    const writer = new oc.StlAPI_Writer()
-    writer.SetASCIIMode(false) // Binary STL
-
-    // Try different Write overloads
-    if (writer.Write_1) {
-      writer.Write_1(shape, filePath)
-    } else if (writer.Write) {
-      writer.Write(shape, filePath)
+    // Use static StlAPI.Write method - third parameter is ASCII mode (false = binary)
+    const success = oc.StlAPI.Write(shape, filePath, false)
+    if (!success) {
+      throw new Error('Failed to write STL file')
     }
   } else {
     // STEP format - try multiple approaches

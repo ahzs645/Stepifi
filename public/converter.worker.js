@@ -1,7 +1,7 @@
 /**
  * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-01-19T01:04:42.175Z
+ * Generated: 2026-01-19T01:19:21.147Z
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
  *           large mesh optimization, JavaScript mesh repairs, fallback strategies,
@@ -1313,14 +1313,10 @@ function readStl(oc, filePath) {
  */
 function writeOutput(oc, shape, format, filePath) {
   if (format === 'stl') {
-    const writer = new oc.StlAPI_Writer()
-    writer.SetASCIIMode(false) // Binary STL
-
-    // Try different Write overloads
-    if (writer.Write_1) {
-      writer.Write_1(shape, filePath)
-    } else if (writer.Write) {
-      writer.Write(shape, filePath)
+    // Use static StlAPI.Write method - third parameter is ASCII mode (false = binary)
+    const success = oc.StlAPI.Write(shape, filePath, false)
+    if (!success) {
+      throw new Error('Failed to write STL file')
     }
   } else {
     // STEP format - try multiple approaches
@@ -2067,6 +2063,23 @@ async function handleConvert(data) {
   let outputData
 
   postProgress(`Writing ${actualFormat.toUpperCase()} file...`)
+
+  // STL export requires the shape to be meshed/triangulated first
+  if (actualFormat === 'stl') {
+    postProgress('Meshing geometry for STL export...')
+    try {
+      const meshParams = new oc.BRepMesh_IncrementalMesh_2(
+        finalShape,
+        tolerance, // linear deflection
+        false, // relative
+        0.5, // angular deflection
+        false // parallel
+      )
+      meshParams.Perform(new oc.Message_ProgressRange_1())
+    } catch (meshErr) {
+      console.warn('Meshing step warning:', meshErr.message)
+    }
+  }
 
   try {
     writeOutput(oc, finalShape, actualFormat, outputPath)

@@ -285,9 +285,37 @@ async function parseF3D(arrayBuffer, loadJSZip) {
   for (const smbFile of smbFiles) {
     try {
       const smbData = await zip.file(smbFile).async('arraybuffer')
+      const smbBytes = new Uint8Array(smbData)
       console.log('Parsing ' + smbFile + ': ' + smbData.byteLength + ' bytes')
 
-      const bodies = parseAcisBinary(new Uint8Array(smbData))
+      // Check if this is direct ACIS format or has a wrapper
+      const headerStr = new TextDecoder().decode(smbBytes.slice(0, 15))
+      let dataToparse = smbBytes
+
+      if (!headerStr.startsWith('ACIS BinaryFile') && !headerStr.startsWith('ASM BinaryFile')) {
+        // SMB files may have a header - try to find ACIS data start
+        const acisStart = findACISDataStart(smbBytes)
+        if (acisStart > 0) {
+          console.log('  Found ACIS data at offset ' + acisStart)
+          dataToparse = smbBytes.slice(acisStart)
+        } else {
+          // Try to find 'ACIS' or 'ASM ' marker in file
+          let foundOffset = -1
+          for (let i = 0; i < Math.min(4096, smbBytes.length - 15); i++) {
+            const chunk = new TextDecoder().decode(smbBytes.slice(i, i + 15))
+            if (chunk.startsWith('ACIS BinaryFile') || chunk.startsWith('ASM BinaryFile')) {
+              foundOffset = i
+              break
+            }
+          }
+          if (foundOffset >= 0) {
+            console.log('  Found ACIS header at offset ' + foundOffset)
+            dataToparse = smbBytes.slice(foundOffset)
+          }
+        }
+      }
+
+      const bodies = parseAcisBinary(dataToparse)
       console.log('  Found ' + bodies.length + ' bodies')
       allBodies.push(...bodies)
     } catch (e) {
