@@ -1297,6 +1297,64 @@ export function convertACISShell(oc, shellEntity) {
 }
 
 /**
+ * Try to create a solid from a shell
+ */
+function tryMakeSolid(oc, shell) {
+  // First try to sew the shell to ensure it's closed
+  try {
+    const sewing = new oc.BRepBuilderAPI_Sewing(1e-6, true, true, true, false)
+    sewing.Add(shell)
+    sewing.Perform(new oc.Message_ProgressRange_1())
+    const sewedShape = sewing.SewedShape()
+
+    // Check if we got a solid directly from sewing
+    const solidExplorer = new oc.TopExp_Explorer_2(
+      sewedShape,
+      oc.TopAbs_ShapeEnum.TopAbs_SOLID,
+      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+    )
+    if (solidExplorer.More()) {
+      return oc.TopoDS.Solid_1(solidExplorer.Current())
+    }
+
+    // Try to extract shell from sewed shape and make solid
+    const shellExplorer = new oc.TopExp_Explorer_2(
+      sewedShape,
+      oc.TopAbs_ShapeEnum.TopAbs_SHELL,
+      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+    )
+    if (shellExplorer.More()) {
+      const sewedShell = oc.TopoDS.Shell_1(shellExplorer.Current())
+      try {
+        const solidBuilder = new oc.BRepBuilderAPI_MakeSolid_2(sewedShell)
+        if (solidBuilder.IsDone()) {
+          return solidBuilder.Solid()
+        }
+      } catch (e) {
+        // MakeSolid failed, return the sewed shell
+        return sewedShell
+      }
+    }
+
+    return sewedShape
+  } catch (e) {
+    // Sewing failed, try direct MakeSolid
+  }
+
+  // Direct MakeSolid attempt
+  try {
+    const solidBuilder = new oc.BRepBuilderAPI_MakeSolid_2(shell)
+    if (solidBuilder.IsDone()) {
+      return solidBuilder.Solid()
+    }
+  } catch (e) {
+    // MakeSolid failed
+  }
+
+  return shell
+}
+
+/**
  * Convert ACIS body to OpenCascade solid
  */
 export function convertACISBody(oc, bodyEntity) {
@@ -1304,40 +1362,33 @@ export function convertACISBody(oc, bodyEntity) {
 
   try {
     const lumps = bodyEntity.getLumps ? bodyEntity.getLumps() : []
-    const shells = []
+    const solidsAndShells = []
 
     for (const lump of lumps) {
       const lumpShells = lump.getShells ? lump.getShells() : []
       for (const shellEntity of lumpShells) {
         const shell = convertACISShell(oc, shellEntity)
         if (shell) {
-          shells.push(shell)
+          // Try to convert shell to solid
+          const solidOrShell = tryMakeSolid(oc, shell)
+          solidsAndShells.push(solidOrShell)
         }
       }
     }
 
-    if (shells.length === 0) return null
+    if (solidsAndShells.length === 0) return null
 
-    // Try to create solid from shells
-    if (shells.length === 1) {
-      try {
-        const solidBuilder = new oc.BRepBuilderAPI_MakeSolid_2(shells[0])
-        if (solidBuilder.IsDone()) {
-          return solidBuilder.Solid()
-        }
-      } catch (e) {
-        // Fall back to returning shell
-        return shells[0]
-      }
+    if (solidsAndShells.length === 1) {
+      return solidsAndShells[0]
     }
 
-    // Multiple shells - create compound
+    // Multiple shapes - create compound
     const builder = new oc.BRep_Builder()
     const compound = new oc.TopoDS_Compound()
     builder.MakeCompound(compound)
 
-    for (const shell of shells) {
-      builder.Add(compound, shell)
+    for (const shape of solidsAndShells) {
+      builder.Add(compound, shape)
     }
 
     return compound

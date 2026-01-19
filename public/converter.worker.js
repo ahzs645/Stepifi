@@ -1,7 +1,7 @@
 /**
  * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-01-19T01:19:21.147Z
+ * Generated: 2026-01-19T01:50:43.433Z
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
  *           large mesh optimization, JavaScript mesh repairs, fallback strategies,
@@ -1309,9 +1309,103 @@ function readStl(oc, filePath) {
 // ============================================================================
 
 /**
+ * Count shapes of a specific type in a compound
+ */
+function countShapes(oc, shape, shapeType) {
+  let count = 0
+  try {
+    const explorer = new oc.TopExp_Explorer_2(
+      shape,
+      shapeType,
+      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+    )
+    while (explorer.More()) {
+      count++
+      explorer.Next()
+    }
+  } catch (e) {
+    // Explorer may fail on some shapes
+  }
+  return count
+}
+
+/**
+ * Deep validate shape by checking each face's surface
+ * Returns true if all faces are valid
+ */
+function deepValidateShape(oc, shape) {
+  let validFaces = 0
+  let invalidFaces = 0
+
+  try {
+    const faceExplorer = new oc.TopExp_Explorer_2(
+      shape,
+      oc.TopAbs_ShapeEnum.TopAbs_FACE,
+      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+    )
+
+    while (faceExplorer.More()) {
+      try {
+        const face = oc.TopoDS.Face_1(faceExplorer.Current())
+        // Try to get the surface - this is where null pointers would crash
+        const surface = oc.BRep_Tool.Surface_2(face)
+        if (surface && !surface.IsNull()) {
+          validFaces++
+        } else {
+          invalidFaces++
+        }
+      } catch (e) {
+        invalidFaces++
+      }
+      faceExplorer.Next()
+    }
+  } catch (e) {
+    console.warn('Face validation failed:', e.message)
+  }
+
+  console.log(`Deep validation: ${validFaces} valid faces, ${invalidFaces} invalid faces`)
+  return invalidFaces === 0
+}
+
+/**
  * Write output file (STEP or STL)
  */
 function writeOutput(oc, shape, format, filePath) {
+  // Validate shape before export
+  if (!shape) {
+    throw new Error('No shape to export')
+  }
+
+  try {
+    if (shape.IsNull()) {
+      throw new Error('Shape is null/empty')
+    }
+  } catch (e) {
+    // IsNull check may not be available
+  }
+
+  // Count actual geometry content
+  const faceCount = countShapes(oc, shape, oc.TopAbs_ShapeEnum.TopAbs_FACE)
+  const edgeCount = countShapes(oc, shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE)
+  const shellCount = countShapes(oc, shape, oc.TopAbs_ShapeEnum.TopAbs_SHELL)
+  const solidCount = countShapes(oc, shape, oc.TopAbs_ShapeEnum.TopAbs_SOLID)
+
+  console.log(`Shape validation: ${faceCount} faces, ${edgeCount} edges, ${shellCount} shells, ${solidCount} solids`)
+
+  if (faceCount === 0 && edgeCount === 0) {
+    throw new Error('Shape has no geometry (0 faces, 0 edges)')
+  }
+
+  // Deep validate to catch null surface pointers
+  const isDeepValid = deepValidateShape(oc, shape)
+  if (!isDeepValid) {
+    console.warn('Shape has invalid faces - STEP export may fail')
+  }
+
+  // Get shape type for debugging
+  const shapeType = shape.ShapeType()
+  console.log(`Shape type: ${shapeType} (0=COMPOUND, 1=COMPSOLID, 2=SOLID, 3=SHELL, 4=FACE)`)
+
   if (format === 'stl') {
     // Use static StlAPI.Write method - third parameter is ASCII mode (false = binary)
     const success = oc.StlAPI.Write(shape, filePath, false)
@@ -1322,6 +1416,45 @@ function writeOutput(oc, shape, format, filePath) {
     // STEP format - try multiple approaches
     let success = false
 
+    // First try: Rebuild compound with only validated faces
+    let cleanShape = shape
+    if (!isDeepValid) {
+      console.log('Attempting to rebuild shape with only valid faces...')
+      try {
+        const builder = new oc.BRep_Builder()
+        const compound = new oc.TopoDS_Compound()
+        builder.MakeCompound(compound)
+
+        let addedFaces = 0
+        const faceExplorer = new oc.TopExp_Explorer_2(
+          shape,
+          oc.TopAbs_ShapeEnum.TopAbs_FACE,
+          oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+        )
+
+        while (faceExplorer.More()) {
+          try {
+            const face = oc.TopoDS.Face_1(faceExplorer.Current())
+            const surface = oc.BRep_Tool.Surface_2(face)
+            if (surface && !surface.IsNull()) {
+              builder.Add(compound, face)
+              addedFaces++
+            }
+          } catch (e) {
+            // Skip invalid face
+          }
+          faceExplorer.Next()
+        }
+
+        if (addedFaces > 0) {
+          console.log(`Rebuilt compound with ${addedFaces} valid faces`)
+          cleanShape = compound
+        }
+      } catch (e) {
+        console.warn('Failed to rebuild shape:', e.message)
+      }
+    }
+
     // Approach 1: Standard STEPControl_Writer
     if (!success) {
       try {
@@ -1330,7 +1463,7 @@ function writeOutput(oc, shape, format, filePath) {
 
         console.log('Transferring shape to STEP...')
         writer.Transfer(
-          shape,
+          cleanShape,
           oc.STEPControl_StepModelType.STEPControl_AsIs,
           true,
           new oc.Message_ProgressRange_1()
@@ -1354,7 +1487,7 @@ function writeOutput(oc, shape, format, filePath) {
         const writer = new oc.STEPControl_Writer_1()
 
         writer.Transfer(
-          shape,
+          cleanShape,
           oc.STEPControl_StepModelType.STEPControl_ManifoldSolidBrep,
           true,
           new oc.Message_ProgressRange_1()
@@ -1377,7 +1510,7 @@ function writeOutput(oc, shape, format, filePath) {
         const writer = new oc.STEPControl_Writer_1()
 
         writer.Transfer(
-          shape,
+          cleanShape,
           oc.STEPControl_StepModelType.STEPControl_ShellBasedSurfaceModel,
           true,
           new oc.Message_ProgressRange_1()
@@ -1400,7 +1533,7 @@ function writeOutput(oc, shape, format, filePath) {
         const writer = new oc.STEPControl_Writer_1()
 
         writer.Transfer(
-          shape,
+          cleanShape,
           oc.STEPControl_StepModelType.STEPControl_GeometricCurveSet,
           true,
           new oc.Message_ProgressRange_1()
@@ -1425,11 +1558,11 @@ function writeOutput(oc, shape, format, filePath) {
         // BRepTools.Write is static - try different overloads
         let brepSuccess = false
         if (oc.BRepTools.Write_2) {
-          brepSuccess = oc.BRepTools.Write_2(shape, brepPath, new oc.Message_ProgressRange_1())
+          brepSuccess = oc.BRepTools.Write_2(cleanShape, brepPath, new oc.Message_ProgressRange_1())
         } else if (oc.BRepTools.Write_1) {
-          brepSuccess = oc.BRepTools.Write_1(shape, brepPath)
+          brepSuccess = oc.BRepTools.Write_1(cleanShape, brepPath)
         } else if (oc.BRepTools.Write) {
-          brepSuccess = oc.BRepTools.Write(shape, brepPath)
+          brepSuccess = oc.BRepTools.Write(cleanShape, brepPath)
         }
 
         if (brepSuccess) {
