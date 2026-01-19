@@ -14902,6 +14902,24 @@ export declare class XCAFDoc_DataMapOfShapeLabel extends NCollection_BaseMap {
     constructor(theOther: XCAFDoc_DataMapOfShapeLabel);
   }
 
+export declare class XCAFDoc_GeomTolerance extends TDataStd_GenericEmpty {
+  static GetID(): Standard_GUID;
+  static Set(theLabel: TDF_Label): Handle_XCAFDoc_GeomTolerance;
+  SetObject(theGeomToleranceObject: Handle_XCAFDimTolObjects_GeomToleranceObject): void;
+  GetObject(): Handle_XCAFDimTolObjects_GeomToleranceObject;
+  ID(): Standard_GUID;
+  DumpJson(theOStream: Standard_OStream, theDepth: Graphic3d_ZLayerId): void;
+  static get_type_name(): Standard_Character;
+  static get_type_descriptor(): Handle_Standard_Type;
+  DynamicType(): Handle_Standard_Type;
+  NewEmpty(): Handle_TDF_Attribute;
+  delete(): void;
+}
+
+  export declare class XCAFDoc_GeomTolerance_1 extends XCAFDoc_GeomTolerance {
+    constructor();
+  }
+
 export declare class Handle_XCAFDoc_GeomTolerance {
   Nullify(): void;
   IsNull(): boolean;
@@ -61166,6 +61184,341 @@ export declare class Graphic3d_ArrayOfPolygons extends Graphic3d_ArrayOfPrimitiv
     constructor(theMaxVertexs: Graphic3d_ZLayerId, theMaxBounds: Graphic3d_ZLayerId, theMaxEdges: Graphic3d_ZLayerId, theHasVNormals: Standard_Boolean, theHasVColors: Standard_Boolean, theHasBColors: Standard_Boolean, theHasVTexels: Standard_Boolean);
   }
 
+export declare class Graphic3d_Vec3b {
+  static Length(): number;
+  SetValues_1(theX: Standard_Character, theY: Standard_Character, theZ: Standard_Character): void;
+  SetValues_2(theVec2: Graphic3d_Vec2b, theZ: Standard_Character): void;
+  x_1(): Standard_Character;
+  r_1(): Standard_Character;
+  y_1(): Standard_Character;
+  g_1(): Standard_Character;
+  z_1(): Standard_Character;
+  b_1(): Standard_Character;
+  xy(): Graphic3d_Vec2b;
+  yx(): Graphic3d_Vec2b;
+  xz(): Graphic3d_Vec2b;
+  zx(): Graphic3d_Vec2b;
+  yz(): Graphic3d_Vec2b;
+  zy(): Graphic3d_Vec2b;
+  xyz(): Graphic3d_Vec3b;
+  xzy(): Graphic3d_Vec3b;
+  yxz(): Graphic3d_Vec3b;
+  yzx(): Graphic3d_Vec3b;
+  zyx(): Graphic3d_Vec3b;
+  zxy(): Graphic3d_Vec3b;
+  x_2(): Standard_Character;
+  r_2(): Standard_Character;
+  y_2(): Standard_Character;
+  g_2(): Standard_Character;
+  z_2(): Standard_Character;
+  b_2(): Standard_Character;
+  IsEqual(theOther: Graphic3d_Vec3b): boolean;
+  GetData(): Standard_Character;
+  ChangeData(): Standard_Character;
+  Multiply(theFactor: Standard_Character): void;
+  Multiplied(theFactor: Standard_Character): Graphic3d_Vec3b;
+  cwiseMin(theVec: Graphic3d_Vec3b): Graphic3d_Vec3b;
+  cwiseMax(theVec: Graphic3d_Vec3b): Graphic3d_Vec3b;
+  maxComp(): Standard_Character;
+  minComp(): Standard_Character;
+  Dot(theOther: Graphic3d_Vec3b): Standard_Character;
+  Modulus(): Standard_Character;
+  SquareModulus(): Standard_Character;
+  Normalize(): void;
+  Normalized(): Graphic3d_Vec3b;
+  static Cross(theVec1: Graphic3d_Vec3b, theVec2: Graphic3d_Vec3b): Graphic3d_Vec3b;
+  static GetLERP(theFrom: Graphic3d_Vec3b, theTo: Graphic3d_Vec3b, theT: Standard_Character): Graphic3d_Vec3b;
+  static DX(): Graphic3d_Vec3b;
+  static DY(): Graphic3d_Vec3b;
+  static DZ(): Graphic3d_Vec3b;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec3b_1 extends Graphic3d_Vec3b {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec3b_2 extends Graphic3d_Vec3b {
+    constructor(theValue: Standard_Character);
+  }
+
+  export declare class Graphic3d_Vec3b_3 extends Graphic3d_Vec3b {
+    constructor(theX: Standard_Character, theY: Standard_Character, theZ: Standard_Character);
+  }
+
+  export declare class Graphic3d_Vec3b_4 extends Graphic3d_Vec3b {
+    constructor(theVec2: Graphic3d_Vec2b, theZ: Standard_Character);
+  }
+
+export declare class Graphic3d_Vec3d {
+  static Length(): number;
+  SetValues_1(theX: Standard_Real, theY: Standard_Real, theZ: Standard_Real): void;
+  SetValues_2(theVec2: Graphic3d_Vec2d, theZ: Standard_Real): void;
+  x_1(): Standard_Real;
+  r_1(): Standard_Real;
+  y_1(): Standard_Real;
+  g_1(): Standard_Real;
+  z_1(): Standard_Real;
+  b_1(): Standard_Real;
+  xy(): Graphic3d_Vec2d;
+  yx(): Graphic3d_Vec2d;
+  xz(): Graphic3d_Vec2d;
+  zx(): Graphic3d_Vec2d;
+  yz(): Graphic3d_Vec2d;
+  zy(): Graphic3d_Vec2d;
+  xyz(): Graphic3d_Vec3d;
+  xzy(): Graphic3d_Vec3d;
+  yxz(): Graphic3d_Vec3d;
+  yzx(): Graphic3d_Vec3d;
+  zyx(): Graphic3d_Vec3d;
+  zxy(): Graphic3d_Vec3d;
+  x_2(): Standard_Real;
+  r_2(): Standard_Real;
+  y_2(): Standard_Real;
+  g_2(): Standard_Real;
+  z_2(): Standard_Real;
+  b_2(): Standard_Real;
+  IsEqual(theOther: Graphic3d_Vec3d): boolean;
+  GetData(): Standard_Real;
+  ChangeData(): Standard_Real;
+  Multiply(theFactor: Standard_Real): void;
+  Multiplied(theFactor: Standard_Real): Graphic3d_Vec3d;
+  cwiseMin(theVec: Graphic3d_Vec3d): Graphic3d_Vec3d;
+  cwiseMax(theVec: Graphic3d_Vec3d): Graphic3d_Vec3d;
+  maxComp(): Standard_Real;
+  minComp(): Standard_Real;
+  Dot(theOther: Graphic3d_Vec3d): Standard_Real;
+  Modulus(): Standard_Real;
+  SquareModulus(): Standard_Real;
+  Normalize(): void;
+  Normalized(): Graphic3d_Vec3d;
+  static Cross(theVec1: Graphic3d_Vec3d, theVec2: Graphic3d_Vec3d): Graphic3d_Vec3d;
+  static GetLERP(theFrom: Graphic3d_Vec3d, theTo: Graphic3d_Vec3d, theT: Standard_Real): Graphic3d_Vec3d;
+  static DX(): Graphic3d_Vec3d;
+  static DY(): Graphic3d_Vec3d;
+  static DZ(): Graphic3d_Vec3d;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec3d_1 extends Graphic3d_Vec3d {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec3d_2 extends Graphic3d_Vec3d {
+    constructor(theValue: Standard_Real);
+  }
+
+  export declare class Graphic3d_Vec3d_3 extends Graphic3d_Vec3d {
+    constructor(theX: Standard_Real, theY: Standard_Real, theZ: Standard_Real);
+  }
+
+  export declare class Graphic3d_Vec3d_4 extends Graphic3d_Vec3d {
+    constructor(theVec2: Graphic3d_Vec2d, theZ: Standard_Real);
+  }
+
+export declare class Graphic3d_Vec3u {
+  static Length(): number;
+  SetValues_1(theX: number, theY: number, theZ: number): void;
+  SetValues_2(theVec2: Graphic3d_Vec2u, theZ: number): void;
+  x_1(): number;
+  r_1(): number;
+  y_1(): number;
+  g_1(): number;
+  z_1(): number;
+  b_1(): number;
+  xy(): Graphic3d_Vec2u;
+  yx(): Graphic3d_Vec2u;
+  xz(): Graphic3d_Vec2u;
+  zx(): Graphic3d_Vec2u;
+  yz(): Graphic3d_Vec2u;
+  zy(): Graphic3d_Vec2u;
+  xyz(): Graphic3d_Vec3u;
+  xzy(): Graphic3d_Vec3u;
+  yxz(): Graphic3d_Vec3u;
+  yzx(): Graphic3d_Vec3u;
+  zyx(): Graphic3d_Vec3u;
+  zxy(): Graphic3d_Vec3u;
+  x_2(): number;
+  r_2(): number;
+  y_2(): number;
+  g_2(): number;
+  z_2(): number;
+  b_2(): number;
+  IsEqual(theOther: Graphic3d_Vec3u): boolean;
+  GetData(): number;
+  ChangeData(): number;
+  Multiply(theFactor: number): void;
+  Multiplied(theFactor: number): Graphic3d_Vec3u;
+  cwiseMin(theVec: Graphic3d_Vec3u): Graphic3d_Vec3u;
+  cwiseMax(theVec: Graphic3d_Vec3u): Graphic3d_Vec3u;
+  maxComp(): number;
+  minComp(): number;
+  Dot(theOther: Graphic3d_Vec3u): number;
+  Modulus(): number;
+  SquareModulus(): number;
+  Normalize(): void;
+  Normalized(): Graphic3d_Vec3u;
+  static Cross(theVec1: Graphic3d_Vec3u, theVec2: Graphic3d_Vec3u): Graphic3d_Vec3u;
+  static GetLERP(theFrom: Graphic3d_Vec3u, theTo: Graphic3d_Vec3u, theT: number): Graphic3d_Vec3u;
+  static DX(): Graphic3d_Vec3u;
+  static DY(): Graphic3d_Vec3u;
+  static DZ(): Graphic3d_Vec3u;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec3u_1 extends Graphic3d_Vec3u {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec3u_2 extends Graphic3d_Vec3u {
+    constructor(theValue: number);
+  }
+
+  export declare class Graphic3d_Vec3u_3 extends Graphic3d_Vec3u {
+    constructor(theX: number, theY: number, theZ: number);
+  }
+
+  export declare class Graphic3d_Vec3u_4 extends Graphic3d_Vec3u {
+    constructor(theVec2: Graphic3d_Vec2u, theZ: number);
+  }
+
+export declare class Graphic3d_Vec3ub {
+  static Length(): number;
+  SetValues_1(theX: Standard_Byte, theY: Standard_Byte, theZ: Standard_Byte): void;
+  SetValues_2(theVec2: Graphic3d_Vec2ub, theZ: Standard_Byte): void;
+  x_1(): Standard_Byte;
+  r_1(): Standard_Byte;
+  y_1(): Standard_Byte;
+  g_1(): Standard_Byte;
+  z_1(): Standard_Byte;
+  b_1(): Standard_Byte;
+  xy(): Graphic3d_Vec2ub;
+  yx(): Graphic3d_Vec2ub;
+  xz(): Graphic3d_Vec2ub;
+  zx(): Graphic3d_Vec2ub;
+  yz(): Graphic3d_Vec2ub;
+  zy(): Graphic3d_Vec2ub;
+  xyz(): Graphic3d_Vec3ub;
+  xzy(): Graphic3d_Vec3ub;
+  yxz(): Graphic3d_Vec3ub;
+  yzx(): Graphic3d_Vec3ub;
+  zyx(): Graphic3d_Vec3ub;
+  zxy(): Graphic3d_Vec3ub;
+  x_2(): Standard_Byte;
+  r_2(): Standard_Byte;
+  y_2(): Standard_Byte;
+  g_2(): Standard_Byte;
+  z_2(): Standard_Byte;
+  b_2(): Standard_Byte;
+  IsEqual(theOther: Graphic3d_Vec3ub): boolean;
+  GetData(): Standard_Byte;
+  ChangeData(): Standard_Byte;
+  Multiply(theFactor: Standard_Byte): void;
+  Multiplied(theFactor: Standard_Byte): Graphic3d_Vec3ub;
+  cwiseMin(theVec: Graphic3d_Vec3ub): Graphic3d_Vec3ub;
+  cwiseMax(theVec: Graphic3d_Vec3ub): Graphic3d_Vec3ub;
+  maxComp(): Standard_Byte;
+  minComp(): Standard_Byte;
+  Dot(theOther: Graphic3d_Vec3ub): Standard_Byte;
+  Modulus(): Standard_Byte;
+  SquareModulus(): Standard_Byte;
+  Normalize(): void;
+  Normalized(): Graphic3d_Vec3ub;
+  static Cross(theVec1: Graphic3d_Vec3ub, theVec2: Graphic3d_Vec3ub): Graphic3d_Vec3ub;
+  static GetLERP(theFrom: Graphic3d_Vec3ub, theTo: Graphic3d_Vec3ub, theT: Standard_Byte): Graphic3d_Vec3ub;
+  static DX(): Graphic3d_Vec3ub;
+  static DY(): Graphic3d_Vec3ub;
+  static DZ(): Graphic3d_Vec3ub;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec3ub_1 extends Graphic3d_Vec3ub {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec3ub_2 extends Graphic3d_Vec3ub {
+    constructor(theValue: Standard_Byte);
+  }
+
+  export declare class Graphic3d_Vec3ub_3 extends Graphic3d_Vec3ub {
+    constructor(theX: Standard_Byte, theY: Standard_Byte, theZ: Standard_Byte);
+  }
+
+  export declare class Graphic3d_Vec3ub_4 extends Graphic3d_Vec3ub {
+    constructor(theVec2: Graphic3d_Vec2ub, theZ: Standard_Byte);
+  }
+
+export declare class Graphic3d_Vec3i {
+  static Length(): number;
+  SetValues_1(theX: Standard_Integer, theY: Standard_Integer, theZ: Standard_Integer): void;
+  SetValues_2(theVec2: Graphic3d_Vec2i, theZ: Standard_Integer): void;
+  x_1(): Standard_Integer;
+  r_1(): Standard_Integer;
+  y_1(): Standard_Integer;
+  g_1(): Standard_Integer;
+  z_1(): Standard_Integer;
+  b_1(): Standard_Integer;
+  xy(): Graphic3d_Vec2i;
+  yx(): Graphic3d_Vec2i;
+  xz(): Graphic3d_Vec2i;
+  zx(): Graphic3d_Vec2i;
+  yz(): Graphic3d_Vec2i;
+  zy(): Graphic3d_Vec2i;
+  xyz(): Graphic3d_Vec3i;
+  xzy(): Graphic3d_Vec3i;
+  yxz(): Graphic3d_Vec3i;
+  yzx(): Graphic3d_Vec3i;
+  zyx(): Graphic3d_Vec3i;
+  zxy(): Graphic3d_Vec3i;
+  x_2(): Standard_Integer;
+  r_2(): Standard_Integer;
+  y_2(): Standard_Integer;
+  g_2(): Standard_Integer;
+  z_2(): Standard_Integer;
+  b_2(): Standard_Integer;
+  IsEqual(theOther: Graphic3d_Vec3i): boolean;
+  GetData(): Standard_Integer;
+  ChangeData(): Standard_Integer;
+  Multiply(theFactor: Standard_Integer): void;
+  Multiplied(theFactor: Standard_Integer): Graphic3d_Vec3i;
+  cwiseMin(theVec: Graphic3d_Vec3i): Graphic3d_Vec3i;
+  cwiseMax(theVec: Graphic3d_Vec3i): Graphic3d_Vec3i;
+  maxComp(): Standard_Integer;
+  minComp(): Standard_Integer;
+  Dot(theOther: Graphic3d_Vec3i): Standard_Integer;
+  Modulus(): Standard_Integer;
+  SquareModulus(): Standard_Integer;
+  Normalize(): void;
+  Normalized(): Graphic3d_Vec3i;
+  static Cross(theVec1: Graphic3d_Vec3i, theVec2: Graphic3d_Vec3i): Graphic3d_Vec3i;
+  static GetLERP(theFrom: Graphic3d_Vec3i, theTo: Graphic3d_Vec3i, theT: Standard_Integer): Graphic3d_Vec3i;
+  static DX(): Graphic3d_Vec3i;
+  static DY(): Graphic3d_Vec3i;
+  static DZ(): Graphic3d_Vec3i;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec3i_1 extends Graphic3d_Vec3i {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec3i_2 extends Graphic3d_Vec3i {
+    constructor(theValue: Standard_Integer);
+  }
+
+  export declare class Graphic3d_Vec3i_3 extends Graphic3d_Vec3i {
+    constructor(theX: Standard_Integer, theY: Standard_Integer, theZ: Standard_Integer);
+  }
+
+  export declare class Graphic3d_Vec3i_4 extends Graphic3d_Vec3i {
+    constructor(theVec2: Graphic3d_Vec2i, theZ: Standard_Integer);
+  }
+
 export declare type Graphic3d_AlphaMode = {
   Graphic3d_AlphaMode_Opaque: {};
   Graphic3d_AlphaMode_Mask: {};
@@ -61532,6 +61885,582 @@ export declare class Graphic3d_TextureSet extends Standard_Transient {
 
   export declare class Graphic3d_TextureSet_3 extends Graphic3d_TextureSet {
     constructor(theTexture: Handle_Graphic3d_TextureMap);
+  }
+
+export declare class Graphic3d_Vec4u {
+  static Length(): number;
+  SetValues_1(theX: number, theY: number, theZ: number, theW: number): void;
+  SetValues_2(theVec3: Graphic3d_Vec3u, theW: number): void;
+  x_1(): number;
+  r_1(): number;
+  y_1(): number;
+  g_1(): number;
+  z_1(): number;
+  b_1(): number;
+  w_1(): number;
+  a_1(): number;
+  xy(): Graphic3d_Vec2u;
+  yx(): Graphic3d_Vec2u;
+  xz(): Graphic3d_Vec2u;
+  zx(): Graphic3d_Vec2u;
+  xw(): Graphic3d_Vec2u;
+  wx(): Graphic3d_Vec2u;
+  yz(): Graphic3d_Vec2u;
+  zy(): Graphic3d_Vec2u;
+  yw(): Graphic3d_Vec2u;
+  wy(): Graphic3d_Vec2u;
+  zw(): Graphic3d_Vec2u;
+  wz(): Graphic3d_Vec2u;
+  xyz(): Graphic3d_Vec3u;
+  xzy(): Graphic3d_Vec3u;
+  yxz(): Graphic3d_Vec3u;
+  yzx(): Graphic3d_Vec3u;
+  zyx(): Graphic3d_Vec3u;
+  zxy(): Graphic3d_Vec3u;
+  xyw(): Graphic3d_Vec3u;
+  xwy(): Graphic3d_Vec3u;
+  yxw(): Graphic3d_Vec3u;
+  ywx(): Graphic3d_Vec3u;
+  wyx(): Graphic3d_Vec3u;
+  wxy(): Graphic3d_Vec3u;
+  xzw(): Graphic3d_Vec3u;
+  xwz(): Graphic3d_Vec3u;
+  zxw(): Graphic3d_Vec3u;
+  zwx(): Graphic3d_Vec3u;
+  wzx(): Graphic3d_Vec3u;
+  wxz(): Graphic3d_Vec3u;
+  yzw(): Graphic3d_Vec3u;
+  ywz(): Graphic3d_Vec3u;
+  zyw(): Graphic3d_Vec3u;
+  zwy(): Graphic3d_Vec3u;
+  wzy(): Graphic3d_Vec3u;
+  wyz(): Graphic3d_Vec3u;
+  rgb(): Graphic3d_Vec3u;
+  rbg(): Graphic3d_Vec3u;
+  grb(): Graphic3d_Vec3u;
+  gbr(): Graphic3d_Vec3u;
+  bgr(): Graphic3d_Vec3u;
+  brg(): Graphic3d_Vec3u;
+  x_2(): number;
+  r_2(): number;
+  y_2(): number;
+  g_2(): number;
+  z_2(): number;
+  b_2(): number;
+  w_2(): number;
+  a_2(): number;
+  IsEqual(theOther: Graphic3d_Vec4u): boolean;
+  GetData(): number;
+  ChangeData(): number;
+  Multiply(theFactor: number): void;
+  Multiplied(theFactor: number): Graphic3d_Vec4u;
+  cwiseMin(theVec: Graphic3d_Vec4u): Graphic3d_Vec4u;
+  cwiseMax(theVec: Graphic3d_Vec4u): Graphic3d_Vec4u;
+  maxComp(): number;
+  minComp(): number;
+  Dot(theOther: Graphic3d_Vec4u): number;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec4u_1 extends Graphic3d_Vec4u {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec4u_2 extends Graphic3d_Vec4u {
+    constructor(theValue: number);
+  }
+
+  export declare class Graphic3d_Vec4u_3 extends Graphic3d_Vec4u {
+    constructor(theX: number, theY: number, theZ: number, theW: number);
+  }
+
+  export declare class Graphic3d_Vec4u_4 extends Graphic3d_Vec4u {
+    constructor(theVec2: Graphic3d_Vec2u);
+  }
+
+  export declare class Graphic3d_Vec4u_5 extends Graphic3d_Vec4u {
+    constructor(theVec3: Graphic3d_Vec3u, theW: number);
+  }
+
+export declare class Graphic3d_Vec4d {
+  static Length(): number;
+  SetValues_1(theX: Standard_Real, theY: Standard_Real, theZ: Standard_Real, theW: Standard_Real): void;
+  SetValues_2(theVec3: Graphic3d_Vec3d, theW: Standard_Real): void;
+  x_1(): Standard_Real;
+  r_1(): Standard_Real;
+  y_1(): Standard_Real;
+  g_1(): Standard_Real;
+  z_1(): Standard_Real;
+  b_1(): Standard_Real;
+  w_1(): Standard_Real;
+  a_1(): Standard_Real;
+  xy(): Graphic3d_Vec2d;
+  yx(): Graphic3d_Vec2d;
+  xz(): Graphic3d_Vec2d;
+  zx(): Graphic3d_Vec2d;
+  xw(): Graphic3d_Vec2d;
+  wx(): Graphic3d_Vec2d;
+  yz(): Graphic3d_Vec2d;
+  zy(): Graphic3d_Vec2d;
+  yw(): Graphic3d_Vec2d;
+  wy(): Graphic3d_Vec2d;
+  zw(): Graphic3d_Vec2d;
+  wz(): Graphic3d_Vec2d;
+  xyz(): Graphic3d_Vec3d;
+  xzy(): Graphic3d_Vec3d;
+  yxz(): Graphic3d_Vec3d;
+  yzx(): Graphic3d_Vec3d;
+  zyx(): Graphic3d_Vec3d;
+  zxy(): Graphic3d_Vec3d;
+  xyw(): Graphic3d_Vec3d;
+  xwy(): Graphic3d_Vec3d;
+  yxw(): Graphic3d_Vec3d;
+  ywx(): Graphic3d_Vec3d;
+  wyx(): Graphic3d_Vec3d;
+  wxy(): Graphic3d_Vec3d;
+  xzw(): Graphic3d_Vec3d;
+  xwz(): Graphic3d_Vec3d;
+  zxw(): Graphic3d_Vec3d;
+  zwx(): Graphic3d_Vec3d;
+  wzx(): Graphic3d_Vec3d;
+  wxz(): Graphic3d_Vec3d;
+  yzw(): Graphic3d_Vec3d;
+  ywz(): Graphic3d_Vec3d;
+  zyw(): Graphic3d_Vec3d;
+  zwy(): Graphic3d_Vec3d;
+  wzy(): Graphic3d_Vec3d;
+  wyz(): Graphic3d_Vec3d;
+  rgb(): Graphic3d_Vec3d;
+  rbg(): Graphic3d_Vec3d;
+  grb(): Graphic3d_Vec3d;
+  gbr(): Graphic3d_Vec3d;
+  bgr(): Graphic3d_Vec3d;
+  brg(): Graphic3d_Vec3d;
+  x_2(): Standard_Real;
+  r_2(): Standard_Real;
+  y_2(): Standard_Real;
+  g_2(): Standard_Real;
+  z_2(): Standard_Real;
+  b_2(): Standard_Real;
+  w_2(): Standard_Real;
+  a_2(): Standard_Real;
+  IsEqual(theOther: Graphic3d_Vec4d): boolean;
+  GetData(): Standard_Real;
+  ChangeData(): Standard_Real;
+  Multiply(theFactor: Standard_Real): void;
+  Multiplied(theFactor: Standard_Real): Graphic3d_Vec4d;
+  cwiseMin(theVec: Graphic3d_Vec4d): Graphic3d_Vec4d;
+  cwiseMax(theVec: Graphic3d_Vec4d): Graphic3d_Vec4d;
+  maxComp(): Standard_Real;
+  minComp(): Standard_Real;
+  Dot(theOther: Graphic3d_Vec4d): Standard_Real;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec4d_1 extends Graphic3d_Vec4d {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec4d_2 extends Graphic3d_Vec4d {
+    constructor(theValue: Standard_Real);
+  }
+
+  export declare class Graphic3d_Vec4d_3 extends Graphic3d_Vec4d {
+    constructor(theX: Standard_Real, theY: Standard_Real, theZ: Standard_Real, theW: Standard_Real);
+  }
+
+  export declare class Graphic3d_Vec4d_4 extends Graphic3d_Vec4d {
+    constructor(theVec2: Graphic3d_Vec2d);
+  }
+
+  export declare class Graphic3d_Vec4d_5 extends Graphic3d_Vec4d {
+    constructor(theVec3: Graphic3d_Vec3d, theW: Standard_Real);
+  }
+
+export declare class Graphic3d_Vec4b {
+  static Length(): number;
+  SetValues_1(theX: Standard_Character, theY: Standard_Character, theZ: Standard_Character, theW: Standard_Character): void;
+  SetValues_2(theVec3: Graphic3d_Vec3b, theW: Standard_Character): void;
+  x_1(): Standard_Character;
+  r_1(): Standard_Character;
+  y_1(): Standard_Character;
+  g_1(): Standard_Character;
+  z_1(): Standard_Character;
+  b_1(): Standard_Character;
+  w_1(): Standard_Character;
+  a_1(): Standard_Character;
+  xy(): Graphic3d_Vec2b;
+  yx(): Graphic3d_Vec2b;
+  xz(): Graphic3d_Vec2b;
+  zx(): Graphic3d_Vec2b;
+  xw(): Graphic3d_Vec2b;
+  wx(): Graphic3d_Vec2b;
+  yz(): Graphic3d_Vec2b;
+  zy(): Graphic3d_Vec2b;
+  yw(): Graphic3d_Vec2b;
+  wy(): Graphic3d_Vec2b;
+  zw(): Graphic3d_Vec2b;
+  wz(): Graphic3d_Vec2b;
+  xyz(): Graphic3d_Vec3b;
+  xzy(): Graphic3d_Vec3b;
+  yxz(): Graphic3d_Vec3b;
+  yzx(): Graphic3d_Vec3b;
+  zyx(): Graphic3d_Vec3b;
+  zxy(): Graphic3d_Vec3b;
+  xyw(): Graphic3d_Vec3b;
+  xwy(): Graphic3d_Vec3b;
+  yxw(): Graphic3d_Vec3b;
+  ywx(): Graphic3d_Vec3b;
+  wyx(): Graphic3d_Vec3b;
+  wxy(): Graphic3d_Vec3b;
+  xzw(): Graphic3d_Vec3b;
+  xwz(): Graphic3d_Vec3b;
+  zxw(): Graphic3d_Vec3b;
+  zwx(): Graphic3d_Vec3b;
+  wzx(): Graphic3d_Vec3b;
+  wxz(): Graphic3d_Vec3b;
+  yzw(): Graphic3d_Vec3b;
+  ywz(): Graphic3d_Vec3b;
+  zyw(): Graphic3d_Vec3b;
+  zwy(): Graphic3d_Vec3b;
+  wzy(): Graphic3d_Vec3b;
+  wyz(): Graphic3d_Vec3b;
+  rgb(): Graphic3d_Vec3b;
+  rbg(): Graphic3d_Vec3b;
+  grb(): Graphic3d_Vec3b;
+  gbr(): Graphic3d_Vec3b;
+  bgr(): Graphic3d_Vec3b;
+  brg(): Graphic3d_Vec3b;
+  x_2(): Standard_Character;
+  r_2(): Standard_Character;
+  y_2(): Standard_Character;
+  g_2(): Standard_Character;
+  z_2(): Standard_Character;
+  b_2(): Standard_Character;
+  w_2(): Standard_Character;
+  a_2(): Standard_Character;
+  IsEqual(theOther: Graphic3d_Vec4b): boolean;
+  GetData(): Standard_Character;
+  ChangeData(): Standard_Character;
+  Multiply(theFactor: Standard_Character): void;
+  Multiplied(theFactor: Standard_Character): Graphic3d_Vec4b;
+  cwiseMin(theVec: Graphic3d_Vec4b): Graphic3d_Vec4b;
+  cwiseMax(theVec: Graphic3d_Vec4b): Graphic3d_Vec4b;
+  maxComp(): Standard_Character;
+  minComp(): Standard_Character;
+  Dot(theOther: Graphic3d_Vec4b): Standard_Character;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec4b_1 extends Graphic3d_Vec4b {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec4b_2 extends Graphic3d_Vec4b {
+    constructor(theValue: Standard_Character);
+  }
+
+  export declare class Graphic3d_Vec4b_3 extends Graphic3d_Vec4b {
+    constructor(theX: Standard_Character, theY: Standard_Character, theZ: Standard_Character, theW: Standard_Character);
+  }
+
+  export declare class Graphic3d_Vec4b_4 extends Graphic3d_Vec4b {
+    constructor(theVec2: Graphic3d_Vec2b);
+  }
+
+  export declare class Graphic3d_Vec4b_5 extends Graphic3d_Vec4b {
+    constructor(theVec3: Graphic3d_Vec3b, theW: Standard_Character);
+  }
+
+export declare class Graphic3d_Vec4i {
+  static Length(): number;
+  SetValues_1(theX: Standard_Integer, theY: Standard_Integer, theZ: Standard_Integer, theW: Standard_Integer): void;
+  SetValues_2(theVec3: Graphic3d_Vec3i, theW: Standard_Integer): void;
+  x_1(): Standard_Integer;
+  r_1(): Standard_Integer;
+  y_1(): Standard_Integer;
+  g_1(): Standard_Integer;
+  z_1(): Standard_Integer;
+  b_1(): Standard_Integer;
+  w_1(): Standard_Integer;
+  a_1(): Standard_Integer;
+  xy(): Graphic3d_Vec2i;
+  yx(): Graphic3d_Vec2i;
+  xz(): Graphic3d_Vec2i;
+  zx(): Graphic3d_Vec2i;
+  xw(): Graphic3d_Vec2i;
+  wx(): Graphic3d_Vec2i;
+  yz(): Graphic3d_Vec2i;
+  zy(): Graphic3d_Vec2i;
+  yw(): Graphic3d_Vec2i;
+  wy(): Graphic3d_Vec2i;
+  zw(): Graphic3d_Vec2i;
+  wz(): Graphic3d_Vec2i;
+  xyz(): Graphic3d_Vec3i;
+  xzy(): Graphic3d_Vec3i;
+  yxz(): Graphic3d_Vec3i;
+  yzx(): Graphic3d_Vec3i;
+  zyx(): Graphic3d_Vec3i;
+  zxy(): Graphic3d_Vec3i;
+  xyw(): Graphic3d_Vec3i;
+  xwy(): Graphic3d_Vec3i;
+  yxw(): Graphic3d_Vec3i;
+  ywx(): Graphic3d_Vec3i;
+  wyx(): Graphic3d_Vec3i;
+  wxy(): Graphic3d_Vec3i;
+  xzw(): Graphic3d_Vec3i;
+  xwz(): Graphic3d_Vec3i;
+  zxw(): Graphic3d_Vec3i;
+  zwx(): Graphic3d_Vec3i;
+  wzx(): Graphic3d_Vec3i;
+  wxz(): Graphic3d_Vec3i;
+  yzw(): Graphic3d_Vec3i;
+  ywz(): Graphic3d_Vec3i;
+  zyw(): Graphic3d_Vec3i;
+  zwy(): Graphic3d_Vec3i;
+  wzy(): Graphic3d_Vec3i;
+  wyz(): Graphic3d_Vec3i;
+  rgb(): Graphic3d_Vec3i;
+  rbg(): Graphic3d_Vec3i;
+  grb(): Graphic3d_Vec3i;
+  gbr(): Graphic3d_Vec3i;
+  bgr(): Graphic3d_Vec3i;
+  brg(): Graphic3d_Vec3i;
+  x_2(): Standard_Integer;
+  r_2(): Standard_Integer;
+  y_2(): Standard_Integer;
+  g_2(): Standard_Integer;
+  z_2(): Standard_Integer;
+  b_2(): Standard_Integer;
+  w_2(): Standard_Integer;
+  a_2(): Standard_Integer;
+  IsEqual(theOther: Graphic3d_Vec4i): boolean;
+  GetData(): Standard_Integer;
+  ChangeData(): Standard_Integer;
+  Multiply(theFactor: Standard_Integer): void;
+  Multiplied(theFactor: Standard_Integer): Graphic3d_Vec4i;
+  cwiseMin(theVec: Graphic3d_Vec4i): Graphic3d_Vec4i;
+  cwiseMax(theVec: Graphic3d_Vec4i): Graphic3d_Vec4i;
+  maxComp(): Standard_Integer;
+  minComp(): Standard_Integer;
+  Dot(theOther: Graphic3d_Vec4i): Standard_Integer;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec4i_1 extends Graphic3d_Vec4i {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec4i_2 extends Graphic3d_Vec4i {
+    constructor(theValue: Standard_Integer);
+  }
+
+  export declare class Graphic3d_Vec4i_3 extends Graphic3d_Vec4i {
+    constructor(theX: Standard_Integer, theY: Standard_Integer, theZ: Standard_Integer, theW: Standard_Integer);
+  }
+
+  export declare class Graphic3d_Vec4i_4 extends Graphic3d_Vec4i {
+    constructor(theVec2: Graphic3d_Vec2i);
+  }
+
+  export declare class Graphic3d_Vec4i_5 extends Graphic3d_Vec4i {
+    constructor(theVec3: Graphic3d_Vec3i, theW: Standard_Integer);
+  }
+
+export declare class Graphic3d_Vec4 {
+  static Length(): number;
+  SetValues_1(theX: Standard_ShortReal, theY: Standard_ShortReal, theZ: Standard_ShortReal, theW: Standard_ShortReal): void;
+  SetValues_2(theVec3: gp_Vec3f, theW: Standard_ShortReal): void;
+  x_1(): Standard_ShortReal;
+  r_1(): Standard_ShortReal;
+  y_1(): Standard_ShortReal;
+  g_1(): Standard_ShortReal;
+  z_1(): Standard_ShortReal;
+  b_1(): Standard_ShortReal;
+  w_1(): Standard_ShortReal;
+  a_1(): Standard_ShortReal;
+  xy(): gp_Vec2f;
+  yx(): gp_Vec2f;
+  xz(): gp_Vec2f;
+  zx(): gp_Vec2f;
+  xw(): gp_Vec2f;
+  wx(): gp_Vec2f;
+  yz(): gp_Vec2f;
+  zy(): gp_Vec2f;
+  yw(): gp_Vec2f;
+  wy(): gp_Vec2f;
+  zw(): gp_Vec2f;
+  wz(): gp_Vec2f;
+  xyz(): gp_Vec3f;
+  xzy(): gp_Vec3f;
+  yxz(): gp_Vec3f;
+  yzx(): gp_Vec3f;
+  zyx(): gp_Vec3f;
+  zxy(): gp_Vec3f;
+  xyw(): gp_Vec3f;
+  xwy(): gp_Vec3f;
+  yxw(): gp_Vec3f;
+  ywx(): gp_Vec3f;
+  wyx(): gp_Vec3f;
+  wxy(): gp_Vec3f;
+  xzw(): gp_Vec3f;
+  xwz(): gp_Vec3f;
+  zxw(): gp_Vec3f;
+  zwx(): gp_Vec3f;
+  wzx(): gp_Vec3f;
+  wxz(): gp_Vec3f;
+  yzw(): gp_Vec3f;
+  ywz(): gp_Vec3f;
+  zyw(): gp_Vec3f;
+  zwy(): gp_Vec3f;
+  wzy(): gp_Vec3f;
+  wyz(): gp_Vec3f;
+  rgb(): gp_Vec3f;
+  rbg(): gp_Vec3f;
+  grb(): gp_Vec3f;
+  gbr(): gp_Vec3f;
+  bgr(): gp_Vec3f;
+  brg(): gp_Vec3f;
+  x_2(): Standard_ShortReal;
+  r_2(): Standard_ShortReal;
+  y_2(): Standard_ShortReal;
+  g_2(): Standard_ShortReal;
+  z_2(): Standard_ShortReal;
+  b_2(): Standard_ShortReal;
+  w_2(): Standard_ShortReal;
+  a_2(): Standard_ShortReal;
+  IsEqual(theOther: Graphic3d_Vec4): boolean;
+  GetData(): Standard_ShortReal;
+  ChangeData(): Standard_ShortReal;
+  Multiply(theFactor: Standard_ShortReal): void;
+  Multiplied(theFactor: Standard_ShortReal): Graphic3d_Vec4;
+  cwiseMin(theVec: Graphic3d_Vec4): Graphic3d_Vec4;
+  cwiseMax(theVec: Graphic3d_Vec4): Graphic3d_Vec4;
+  maxComp(): Standard_ShortReal;
+  minComp(): Standard_ShortReal;
+  Dot(theOther: Graphic3d_Vec4): Standard_ShortReal;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec4_1 extends Graphic3d_Vec4 {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec4_2 extends Graphic3d_Vec4 {
+    constructor(theValue: Standard_ShortReal);
+  }
+
+  export declare class Graphic3d_Vec4_3 extends Graphic3d_Vec4 {
+    constructor(theX: Standard_ShortReal, theY: Standard_ShortReal, theZ: Standard_ShortReal, theW: Standard_ShortReal);
+  }
+
+  export declare class Graphic3d_Vec4_4 extends Graphic3d_Vec4 {
+    constructor(theVec2: gp_Vec2f);
+  }
+
+  export declare class Graphic3d_Vec4_5 extends Graphic3d_Vec4 {
+    constructor(theVec3: gp_Vec3f, theW: Standard_ShortReal);
+  }
+
+export declare class Graphic3d_Vec4ub {
+  static Length(): number;
+  SetValues_1(theX: Standard_Byte, theY: Standard_Byte, theZ: Standard_Byte, theW: Standard_Byte): void;
+  SetValues_2(theVec3: Graphic3d_Vec3ub, theW: Standard_Byte): void;
+  x_1(): Standard_Byte;
+  r_1(): Standard_Byte;
+  y_1(): Standard_Byte;
+  g_1(): Standard_Byte;
+  z_1(): Standard_Byte;
+  b_1(): Standard_Byte;
+  w_1(): Standard_Byte;
+  a_1(): Standard_Byte;
+  xy(): Graphic3d_Vec2ub;
+  yx(): Graphic3d_Vec2ub;
+  xz(): Graphic3d_Vec2ub;
+  zx(): Graphic3d_Vec2ub;
+  xw(): Graphic3d_Vec2ub;
+  wx(): Graphic3d_Vec2ub;
+  yz(): Graphic3d_Vec2ub;
+  zy(): Graphic3d_Vec2ub;
+  yw(): Graphic3d_Vec2ub;
+  wy(): Graphic3d_Vec2ub;
+  zw(): Graphic3d_Vec2ub;
+  wz(): Graphic3d_Vec2ub;
+  xyz(): Graphic3d_Vec3ub;
+  xzy(): Graphic3d_Vec3ub;
+  yxz(): Graphic3d_Vec3ub;
+  yzx(): Graphic3d_Vec3ub;
+  zyx(): Graphic3d_Vec3ub;
+  zxy(): Graphic3d_Vec3ub;
+  xyw(): Graphic3d_Vec3ub;
+  xwy(): Graphic3d_Vec3ub;
+  yxw(): Graphic3d_Vec3ub;
+  ywx(): Graphic3d_Vec3ub;
+  wyx(): Graphic3d_Vec3ub;
+  wxy(): Graphic3d_Vec3ub;
+  xzw(): Graphic3d_Vec3ub;
+  xwz(): Graphic3d_Vec3ub;
+  zxw(): Graphic3d_Vec3ub;
+  zwx(): Graphic3d_Vec3ub;
+  wzx(): Graphic3d_Vec3ub;
+  wxz(): Graphic3d_Vec3ub;
+  yzw(): Graphic3d_Vec3ub;
+  ywz(): Graphic3d_Vec3ub;
+  zyw(): Graphic3d_Vec3ub;
+  zwy(): Graphic3d_Vec3ub;
+  wzy(): Graphic3d_Vec3ub;
+  wyz(): Graphic3d_Vec3ub;
+  rgb(): Graphic3d_Vec3ub;
+  rbg(): Graphic3d_Vec3ub;
+  grb(): Graphic3d_Vec3ub;
+  gbr(): Graphic3d_Vec3ub;
+  bgr(): Graphic3d_Vec3ub;
+  brg(): Graphic3d_Vec3ub;
+  x_2(): Standard_Byte;
+  r_2(): Standard_Byte;
+  y_2(): Standard_Byte;
+  g_2(): Standard_Byte;
+  z_2(): Standard_Byte;
+  b_2(): Standard_Byte;
+  w_2(): Standard_Byte;
+  a_2(): Standard_Byte;
+  IsEqual(theOther: Graphic3d_Vec4ub): boolean;
+  GetData(): Standard_Byte;
+  ChangeData(): Standard_Byte;
+  Multiply(theFactor: Standard_Byte): void;
+  Multiplied(theFactor: Standard_Byte): Graphic3d_Vec4ub;
+  cwiseMin(theVec: Graphic3d_Vec4ub): Graphic3d_Vec4ub;
+  cwiseMax(theVec: Graphic3d_Vec4ub): Graphic3d_Vec4ub;
+  maxComp(): Standard_Byte;
+  minComp(): Standard_Byte;
+  Dot(theOther: Graphic3d_Vec4ub): Standard_Byte;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec4ub_1 extends Graphic3d_Vec4ub {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec4ub_2 extends Graphic3d_Vec4ub {
+    constructor(theValue: Standard_Byte);
+  }
+
+  export declare class Graphic3d_Vec4ub_3 extends Graphic3d_Vec4ub {
+    constructor(theX: Standard_Byte, theY: Standard_Byte, theZ: Standard_Byte, theW: Standard_Byte);
+  }
+
+  export declare class Graphic3d_Vec4ub_4 extends Graphic3d_Vec4ub {
+    constructor(theVec2: Graphic3d_Vec2ub);
+  }
+
+  export declare class Graphic3d_Vec4ub_5 extends Graphic3d_Vec4ub {
+    constructor(theVec3: Graphic3d_Vec3ub, theW: Standard_Byte);
   }
 
 export declare type Graphic3d_TypeOfData = {
@@ -63436,6 +64365,201 @@ export declare class Graphic3d_MarkerImage extends Standard_Transient {
 
   export declare class Graphic3d_MarkerImage_2 extends Graphic3d_MarkerImage {
     constructor(theBitMap: Handle_TColStd_HArray1OfByte, theWidth: Graphic3d_ZLayerId, theHeight: Graphic3d_ZLayerId);
+  }
+
+export declare class Graphic3d_Vec2b {
+  static Length(): number;
+  SetValues(theX: Standard_Character, theY: Standard_Character): void;
+  x_1(): Standard_Character;
+  y_1(): Standard_Character;
+  xy(): Graphic3d_Vec2b;
+  yx(): Graphic3d_Vec2b;
+  x_2(): Standard_Character;
+  y_2(): Standard_Character;
+  IsEqual(theOther: Graphic3d_Vec2b): boolean;
+  GetData(): Standard_Character;
+  ChangeData(): Standard_Character;
+  Multiply(theFactor: Standard_Character): void;
+  Multiplied(theFactor: Standard_Character): Graphic3d_Vec2b;
+  cwiseMin(theVec: Graphic3d_Vec2b): Graphic3d_Vec2b;
+  cwiseMax(theVec: Graphic3d_Vec2b): Graphic3d_Vec2b;
+  maxComp(): Standard_Character;
+  minComp(): Standard_Character;
+  Dot(theOther: Graphic3d_Vec2b): Standard_Character;
+  Modulus(): Standard_Character;
+  SquareModulus(): Standard_Character;
+  static DX(): Graphic3d_Vec2b;
+  static DY(): Graphic3d_Vec2b;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec2b_1 extends Graphic3d_Vec2b {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec2b_2 extends Graphic3d_Vec2b {
+    constructor(theXY: Standard_Character);
+  }
+
+  export declare class Graphic3d_Vec2b_3 extends Graphic3d_Vec2b {
+    constructor(theX: Standard_Character, theY: Standard_Character);
+  }
+
+export declare class Graphic3d_Vec2u {
+  static Length(): number;
+  SetValues(theX: number, theY: number): void;
+  x_1(): number;
+  y_1(): number;
+  xy(): Graphic3d_Vec2u;
+  yx(): Graphic3d_Vec2u;
+  x_2(): number;
+  y_2(): number;
+  IsEqual(theOther: Graphic3d_Vec2u): boolean;
+  GetData(): number;
+  ChangeData(): number;
+  Multiply(theFactor: number): void;
+  Multiplied(theFactor: number): Graphic3d_Vec2u;
+  cwiseMin(theVec: Graphic3d_Vec2u): Graphic3d_Vec2u;
+  cwiseMax(theVec: Graphic3d_Vec2u): Graphic3d_Vec2u;
+  maxComp(): number;
+  minComp(): number;
+  Dot(theOther: Graphic3d_Vec2u): number;
+  Modulus(): number;
+  SquareModulus(): number;
+  static DX(): Graphic3d_Vec2u;
+  static DY(): Graphic3d_Vec2u;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec2u_1 extends Graphic3d_Vec2u {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec2u_2 extends Graphic3d_Vec2u {
+    constructor(theXY: number);
+  }
+
+  export declare class Graphic3d_Vec2u_3 extends Graphic3d_Vec2u {
+    constructor(theX: number, theY: number);
+  }
+
+export declare class Graphic3d_Vec2i {
+  static Length(): number;
+  SetValues(theX: Standard_Integer, theY: Standard_Integer): void;
+  x_1(): Standard_Integer;
+  y_1(): Standard_Integer;
+  xy(): Graphic3d_Vec2i;
+  yx(): Graphic3d_Vec2i;
+  x_2(): Standard_Integer;
+  y_2(): Standard_Integer;
+  IsEqual(theOther: Graphic3d_Vec2i): boolean;
+  GetData(): Standard_Integer;
+  ChangeData(): Standard_Integer;
+  Multiply(theFactor: Standard_Integer): void;
+  Multiplied(theFactor: Standard_Integer): Graphic3d_Vec2i;
+  cwiseMin(theVec: Graphic3d_Vec2i): Graphic3d_Vec2i;
+  cwiseMax(theVec: Graphic3d_Vec2i): Graphic3d_Vec2i;
+  maxComp(): Standard_Integer;
+  minComp(): Standard_Integer;
+  Dot(theOther: Graphic3d_Vec2i): Standard_Integer;
+  Modulus(): Standard_Integer;
+  SquareModulus(): Standard_Integer;
+  static DX(): Graphic3d_Vec2i;
+  static DY(): Graphic3d_Vec2i;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec2i_1 extends Graphic3d_Vec2i {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec2i_2 extends Graphic3d_Vec2i {
+    constructor(theXY: Standard_Integer);
+  }
+
+  export declare class Graphic3d_Vec2i_3 extends Graphic3d_Vec2i {
+    constructor(theX: Standard_Integer, theY: Standard_Integer);
+  }
+
+export declare class Graphic3d_Vec2ub {
+  static Length(): number;
+  SetValues(theX: Standard_Byte, theY: Standard_Byte): void;
+  x_1(): Standard_Byte;
+  y_1(): Standard_Byte;
+  xy(): Graphic3d_Vec2ub;
+  yx(): Graphic3d_Vec2ub;
+  x_2(): Standard_Byte;
+  y_2(): Standard_Byte;
+  IsEqual(theOther: Graphic3d_Vec2ub): boolean;
+  GetData(): Standard_Byte;
+  ChangeData(): Standard_Byte;
+  Multiply(theFactor: Standard_Byte): void;
+  Multiplied(theFactor: Standard_Byte): Graphic3d_Vec2ub;
+  cwiseMin(theVec: Graphic3d_Vec2ub): Graphic3d_Vec2ub;
+  cwiseMax(theVec: Graphic3d_Vec2ub): Graphic3d_Vec2ub;
+  maxComp(): Standard_Byte;
+  minComp(): Standard_Byte;
+  Dot(theOther: Graphic3d_Vec2ub): Standard_Byte;
+  Modulus(): Standard_Byte;
+  SquareModulus(): Standard_Byte;
+  static DX(): Graphic3d_Vec2ub;
+  static DY(): Graphic3d_Vec2ub;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec2ub_1 extends Graphic3d_Vec2ub {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec2ub_2 extends Graphic3d_Vec2ub {
+    constructor(theXY: Standard_Byte);
+  }
+
+  export declare class Graphic3d_Vec2ub_3 extends Graphic3d_Vec2ub {
+    constructor(theX: Standard_Byte, theY: Standard_Byte);
+  }
+
+export declare class Graphic3d_Vec2d {
+  static Length(): number;
+  SetValues(theX: Standard_Real, theY: Standard_Real): void;
+  x_1(): Standard_Real;
+  y_1(): Standard_Real;
+  xy(): Graphic3d_Vec2d;
+  yx(): Graphic3d_Vec2d;
+  x_2(): Standard_Real;
+  y_2(): Standard_Real;
+  IsEqual(theOther: Graphic3d_Vec2d): boolean;
+  GetData(): Standard_Real;
+  ChangeData(): Standard_Real;
+  Multiply(theFactor: Standard_Real): void;
+  Multiplied(theFactor: Standard_Real): Graphic3d_Vec2d;
+  cwiseMin(theVec: Graphic3d_Vec2d): Graphic3d_Vec2d;
+  cwiseMax(theVec: Graphic3d_Vec2d): Graphic3d_Vec2d;
+  maxComp(): Standard_Real;
+  minComp(): Standard_Real;
+  Dot(theOther: Graphic3d_Vec2d): Standard_Real;
+  Modulus(): Standard_Real;
+  SquareModulus(): Standard_Real;
+  static DX(): Graphic3d_Vec2d;
+  static DY(): Graphic3d_Vec2d;
+  DumpJson(theOStream: Standard_OStream, theDepth: Standard_Integer): void;
+  delete(): void;
+}
+
+  export declare class Graphic3d_Vec2d_1 extends Graphic3d_Vec2d {
+    constructor();
+  }
+
+  export declare class Graphic3d_Vec2d_2 extends Graphic3d_Vec2d {
+    constructor(theXY: Standard_Real);
+  }
+
+  export declare class Graphic3d_Vec2d_3 extends Graphic3d_Vec2d {
+    constructor(theX: Standard_Real, theY: Standard_Real);
   }
 
 export declare class Graphic3d_WorldViewProjState {
@@ -145603,7 +146727,6 @@ export declare class gp_Vec2f {
   Multiplied(theFactor: Standard_ShortReal): gp_Vec2f;
   cwiseMin(theVec: gp_Vec2f): gp_Vec2f;
   cwiseMax(theVec: gp_Vec2f): gp_Vec2f;
-  cwiseAbs(): gp_Vec2f;
   maxComp(): Standard_ShortReal;
   minComp(): Standard_ShortReal;
   Dot(theOther: gp_Vec2f): Standard_ShortReal;
@@ -145930,7 +147053,6 @@ export declare class gp_Vec3f {
   Multiplied(theFactor: Standard_ShortReal): gp_Vec3f;
   cwiseMin(theVec: gp_Vec3f): gp_Vec3f;
   cwiseMax(theVec: gp_Vec3f): gp_Vec3f;
-  cwiseAbs(): gp_Vec3f;
   maxComp(): Standard_ShortReal;
   minComp(): Standard_ShortReal;
   Dot(theOther: gp_Vec3f): Standard_ShortReal;
@@ -177476,6 +178598,12 @@ export declare class Handle_IMeshTools_Context {
     constructor(theHandle: Handle_IMeshTools_Context);
   }
 
+export declare class OCJS {
+  constructor();
+  static getStandard_FailureData(exceptionPtr: intptr_t): Standard_Failure;
+  delete(): void;
+}
+
 type Standard_Boolean = boolean;
 type Standard_Byte = number;
 type Standard_Character = number;
@@ -179496,6 +180624,8 @@ export type OpenCascadeInstance = {FS: typeof FS} & {
   XCAFDoc_DataMapOfShapeLabel_1: typeof XCAFDoc_DataMapOfShapeLabel_1;
   XCAFDoc_DataMapOfShapeLabel_2: typeof XCAFDoc_DataMapOfShapeLabel_2;
   XCAFDoc_DataMapOfShapeLabel_3: typeof XCAFDoc_DataMapOfShapeLabel_3;
+  XCAFDoc_GeomTolerance: typeof XCAFDoc_GeomTolerance;
+  XCAFDoc_GeomTolerance_1: typeof XCAFDoc_GeomTolerance_1;
   Handle_XCAFDoc_GeomTolerance: typeof Handle_XCAFDoc_GeomTolerance;
   Handle_XCAFDoc_GeomTolerance_1: typeof Handle_XCAFDoc_GeomTolerance_1;
   Handle_XCAFDoc_GeomTolerance_2: typeof Handle_XCAFDoc_GeomTolerance_2;
@@ -186275,6 +187405,31 @@ export type OpenCascadeInstance = {FS: typeof FS} & {
   Graphic3d_ArrayOfPolygons: typeof Graphic3d_ArrayOfPolygons;
   Graphic3d_ArrayOfPolygons_1: typeof Graphic3d_ArrayOfPolygons_1;
   Graphic3d_ArrayOfPolygons_2: typeof Graphic3d_ArrayOfPolygons_2;
+  Graphic3d_Vec3b: typeof Graphic3d_Vec3b;
+  Graphic3d_Vec3b_1: typeof Graphic3d_Vec3b_1;
+  Graphic3d_Vec3b_2: typeof Graphic3d_Vec3b_2;
+  Graphic3d_Vec3b_3: typeof Graphic3d_Vec3b_3;
+  Graphic3d_Vec3b_4: typeof Graphic3d_Vec3b_4;
+  Graphic3d_Vec3d: typeof Graphic3d_Vec3d;
+  Graphic3d_Vec3d_1: typeof Graphic3d_Vec3d_1;
+  Graphic3d_Vec3d_2: typeof Graphic3d_Vec3d_2;
+  Graphic3d_Vec3d_3: typeof Graphic3d_Vec3d_3;
+  Graphic3d_Vec3d_4: typeof Graphic3d_Vec3d_4;
+  Graphic3d_Vec3u: typeof Graphic3d_Vec3u;
+  Graphic3d_Vec3u_1: typeof Graphic3d_Vec3u_1;
+  Graphic3d_Vec3u_2: typeof Graphic3d_Vec3u_2;
+  Graphic3d_Vec3u_3: typeof Graphic3d_Vec3u_3;
+  Graphic3d_Vec3u_4: typeof Graphic3d_Vec3u_4;
+  Graphic3d_Vec3ub: typeof Graphic3d_Vec3ub;
+  Graphic3d_Vec3ub_1: typeof Graphic3d_Vec3ub_1;
+  Graphic3d_Vec3ub_2: typeof Graphic3d_Vec3ub_2;
+  Graphic3d_Vec3ub_3: typeof Graphic3d_Vec3ub_3;
+  Graphic3d_Vec3ub_4: typeof Graphic3d_Vec3ub_4;
+  Graphic3d_Vec3i: typeof Graphic3d_Vec3i;
+  Graphic3d_Vec3i_1: typeof Graphic3d_Vec3i_1;
+  Graphic3d_Vec3i_2: typeof Graphic3d_Vec3i_2;
+  Graphic3d_Vec3i_3: typeof Graphic3d_Vec3i_3;
+  Graphic3d_Vec3i_4: typeof Graphic3d_Vec3i_4;
   Graphic3d_AlphaMode: Graphic3d_AlphaMode;
   Graphic3d_TypeOfAnswer: Graphic3d_TypeOfAnswer;
   Graphic3d_Group: typeof Graphic3d_Group;
@@ -186324,6 +187479,42 @@ export type OpenCascadeInstance = {FS: typeof FS} & {
   Graphic3d_TextureSet_1: typeof Graphic3d_TextureSet_1;
   Graphic3d_TextureSet_2: typeof Graphic3d_TextureSet_2;
   Graphic3d_TextureSet_3: typeof Graphic3d_TextureSet_3;
+  Graphic3d_Vec4u: typeof Graphic3d_Vec4u;
+  Graphic3d_Vec4u_1: typeof Graphic3d_Vec4u_1;
+  Graphic3d_Vec4u_2: typeof Graphic3d_Vec4u_2;
+  Graphic3d_Vec4u_3: typeof Graphic3d_Vec4u_3;
+  Graphic3d_Vec4u_4: typeof Graphic3d_Vec4u_4;
+  Graphic3d_Vec4u_5: typeof Graphic3d_Vec4u_5;
+  Graphic3d_Vec4d: typeof Graphic3d_Vec4d;
+  Graphic3d_Vec4d_1: typeof Graphic3d_Vec4d_1;
+  Graphic3d_Vec4d_2: typeof Graphic3d_Vec4d_2;
+  Graphic3d_Vec4d_3: typeof Graphic3d_Vec4d_3;
+  Graphic3d_Vec4d_4: typeof Graphic3d_Vec4d_4;
+  Graphic3d_Vec4d_5: typeof Graphic3d_Vec4d_5;
+  Graphic3d_Vec4b: typeof Graphic3d_Vec4b;
+  Graphic3d_Vec4b_1: typeof Graphic3d_Vec4b_1;
+  Graphic3d_Vec4b_2: typeof Graphic3d_Vec4b_2;
+  Graphic3d_Vec4b_3: typeof Graphic3d_Vec4b_3;
+  Graphic3d_Vec4b_4: typeof Graphic3d_Vec4b_4;
+  Graphic3d_Vec4b_5: typeof Graphic3d_Vec4b_5;
+  Graphic3d_Vec4i: typeof Graphic3d_Vec4i;
+  Graphic3d_Vec4i_1: typeof Graphic3d_Vec4i_1;
+  Graphic3d_Vec4i_2: typeof Graphic3d_Vec4i_2;
+  Graphic3d_Vec4i_3: typeof Graphic3d_Vec4i_3;
+  Graphic3d_Vec4i_4: typeof Graphic3d_Vec4i_4;
+  Graphic3d_Vec4i_5: typeof Graphic3d_Vec4i_5;
+  Graphic3d_Vec4: typeof Graphic3d_Vec4;
+  Graphic3d_Vec4_1: typeof Graphic3d_Vec4_1;
+  Graphic3d_Vec4_2: typeof Graphic3d_Vec4_2;
+  Graphic3d_Vec4_3: typeof Graphic3d_Vec4_3;
+  Graphic3d_Vec4_4: typeof Graphic3d_Vec4_4;
+  Graphic3d_Vec4_5: typeof Graphic3d_Vec4_5;
+  Graphic3d_Vec4ub: typeof Graphic3d_Vec4ub;
+  Graphic3d_Vec4ub_1: typeof Graphic3d_Vec4ub_1;
+  Graphic3d_Vec4ub_2: typeof Graphic3d_Vec4ub_2;
+  Graphic3d_Vec4ub_3: typeof Graphic3d_Vec4ub_3;
+  Graphic3d_Vec4ub_4: typeof Graphic3d_Vec4ub_4;
+  Graphic3d_Vec4ub_5: typeof Graphic3d_Vec4ub_5;
   Graphic3d_TypeOfData: Graphic3d_TypeOfData;
   Graphic3d_TypeOfAttribute: Graphic3d_TypeOfAttribute;
   Graphic3d_Buffer: typeof Graphic3d_Buffer;
@@ -186560,6 +187751,26 @@ export type OpenCascadeInstance = {FS: typeof FS} & {
   Graphic3d_MarkerImage: typeof Graphic3d_MarkerImage;
   Graphic3d_MarkerImage_1: typeof Graphic3d_MarkerImage_1;
   Graphic3d_MarkerImage_2: typeof Graphic3d_MarkerImage_2;
+  Graphic3d_Vec2b: typeof Graphic3d_Vec2b;
+  Graphic3d_Vec2b_1: typeof Graphic3d_Vec2b_1;
+  Graphic3d_Vec2b_2: typeof Graphic3d_Vec2b_2;
+  Graphic3d_Vec2b_3: typeof Graphic3d_Vec2b_3;
+  Graphic3d_Vec2u: typeof Graphic3d_Vec2u;
+  Graphic3d_Vec2u_1: typeof Graphic3d_Vec2u_1;
+  Graphic3d_Vec2u_2: typeof Graphic3d_Vec2u_2;
+  Graphic3d_Vec2u_3: typeof Graphic3d_Vec2u_3;
+  Graphic3d_Vec2i: typeof Graphic3d_Vec2i;
+  Graphic3d_Vec2i_1: typeof Graphic3d_Vec2i_1;
+  Graphic3d_Vec2i_2: typeof Graphic3d_Vec2i_2;
+  Graphic3d_Vec2i_3: typeof Graphic3d_Vec2i_3;
+  Graphic3d_Vec2ub: typeof Graphic3d_Vec2ub;
+  Graphic3d_Vec2ub_1: typeof Graphic3d_Vec2ub_1;
+  Graphic3d_Vec2ub_2: typeof Graphic3d_Vec2ub_2;
+  Graphic3d_Vec2ub_3: typeof Graphic3d_Vec2ub_3;
+  Graphic3d_Vec2d: typeof Graphic3d_Vec2d;
+  Graphic3d_Vec2d_1: typeof Graphic3d_Vec2d_1;
+  Graphic3d_Vec2d_2: typeof Graphic3d_Vec2d_2;
+  Graphic3d_Vec2d_3: typeof Graphic3d_Vec2d_3;
   Graphic3d_WorldViewProjState: typeof Graphic3d_WorldViewProjState;
   Graphic3d_WorldViewProjState_1: typeof Graphic3d_WorldViewProjState_1;
   Graphic3d_WorldViewProjState_2: typeof Graphic3d_WorldViewProjState_2;
@@ -202355,6 +203566,7 @@ export type OpenCascadeInstance = {FS: typeof FS} & {
   Handle_IMeshTools_Context_2: typeof Handle_IMeshTools_Context_2;
   Handle_IMeshTools_Context_3: typeof Handle_IMeshTools_Context_3;
   Handle_IMeshTools_Context_4: typeof Handle_IMeshTools_Context_4;
+  OCJS: typeof OCJS;
 };
 
 declare function init(): Promise<OpenCascadeInstance>;

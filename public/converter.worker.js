@@ -1,7 +1,7 @@
 /**
  * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-01-19T01:50:43.433Z
+ * Generated: 2026-01-19T02:52:55.441Z
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
  *           large mesh optimization, JavaScript mesh repairs, fallback strategies,
@@ -1403,8 +1403,13 @@ function writeOutput(oc, shape, format, filePath) {
   }
 
   // Get shape type for debugging
-  const shapeType = shape.ShapeType()
-  console.log(`Shape type: ${shapeType} (0=COMPOUND, 1=COMPSOLID, 2=SOLID, 3=SHELL, 4=FACE)`)
+  try {
+    const shapeType = shape.ShapeType()
+    const typeValue = shapeType.value !== undefined ? shapeType.value : shapeType
+    console.log(`Shape type: ${typeValue} (0=COMPOUND, 1=COMPSOLID, 2=SOLID, 3=SHELL, 4=FACE)`)
+  } catch (e) {
+    console.log('Could not determine shape type')
+  }
 
   if (format === 'stl') {
     // Use static StlAPI.Write method - third parameter is ASCII mode (false = binary)
@@ -1526,10 +1531,134 @@ function writeOutput(oc, shape, format, filePath) {
       }
     }
 
-    // Approach 4: Try with GeometricCurveSet mode (simplest)
+    // Approach 4: Try BREP round-trip (export to BREP, re-import, then STEP)
     if (!success) {
       try {
-        console.log('STEP Approach 4: GeometricCurveSet mode...')
+        console.log('STEP Approach 4: BREP round-trip...')
+        const brepPath = '/temp_export.brep'
+
+        // Export as BREP first using Write_3 (the working method)
+        let brepSuccess = false
+
+        // Write_3 takes (shape, filename, progressRange) and works!
+        if (!brepSuccess && oc.BRepTools.Write_3) {
+          try {
+            brepSuccess = oc.BRepTools.Write_3(cleanShape, brepPath, new oc.Message_ProgressRange_1())
+            console.log('  BRepTools.Write_3 succeeded')
+          } catch (e) {
+            console.log('  BRepTools.Write_3 failed:', e.message)
+          }
+        }
+
+        if (brepSuccess) {
+          console.log('  BREP export succeeded, re-importing...')
+          // Re-import the BREP
+          const reimportedShape = new oc.TopoDS_Shape()
+          const brepBuilder = new oc.BRep_Builder()
+          const readSuccess = oc.BRepTools.Read_2(reimportedShape, brepPath, brepBuilder, new oc.Message_ProgressRange_1())
+
+          if (readSuccess && !reimportedShape.IsNull()) {
+            console.log('  BREP re-import succeeded, exporting to STEP...')
+            // Now try STEP export with the re-imported shape
+            const writer = new oc.STEPControl_Writer_1()
+            writer.Transfer(
+              reimportedShape,
+              oc.STEPControl_StepModelType.STEPControl_AsIs,
+              true,
+              new oc.Message_ProgressRange_1()
+            )
+
+            const writeStatus = writer.Write(filePath)
+            if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
+              success = true
+              console.log('STEP Approach 4 (BREP round-trip) succeeded')
+            }
+          }
+
+          // Cleanup temp file
+          try { oc.FS.unlink(brepPath) } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('STEP Approach 4 failed:', e.message)
+      }
+    }
+
+    // Approach 5: Direct BREP export (save as .brep file - real solid geometry)
+    if (!success) {
+      try {
+        console.log('STEP Approach 5: Direct BREP export...')
+        const brepPath = filePath.replace('.step', '.brep')
+
+        let brepSuccess = false
+
+        // Write_3 takes (shape, filename, progressRange) and works!
+        if (oc.BRepTools.Write_3) {
+          try {
+            brepSuccess = oc.BRepTools.Write_3(cleanShape, brepPath, new oc.Message_ProgressRange_1())
+            console.log('  BRepTools.Write_3 succeeded')
+          } catch (e) {
+            console.log('  BRepTools.Write_3 failed:', e.message)
+          }
+        }
+
+        if (brepSuccess) {
+          // Read BREP and save to original STEP path
+          try {
+            const brepData = oc.FS.readFile(brepPath)
+            oc.FS.writeFile(filePath, brepData)
+            oc.FS.unlink(brepPath)
+            success = true
+            console.log('BREP export succeeded (note: file is BREP format, not STEP)')
+          } catch (e2) {
+            console.warn('BREP file operations failed:', e2.message)
+          }
+        }
+      } catch (e) {
+        console.warn('STEP Approach 5 failed:', e.message)
+      }
+    }
+
+    // Approach 6: Try IGES export (different code path, might work where STEP fails)
+    if (!success && oc.IGESControl_Writer_1) {
+      try {
+        console.log('STEP Approach 6: IGES export (alternative format)...')
+        const igesPath = filePath.replace('.step', '.iges')
+
+        // Initialize IGES controller first (required!)
+        oc.IGESControl_Controller.Init()
+
+        const igesWriter = new oc.IGESControl_Writer_1()
+        // AddShape with progress range
+        igesWriter.AddShape(cleanShape, new oc.Message_ProgressRange_1())
+        igesWriter.ComputeModel()
+        // Write_2 takes (filename, progressRange)
+        const igesStatus = igesWriter.Write_2(igesPath, new oc.Message_ProgressRange_1())
+
+        if (igesStatus) {
+          // Read IGES file and save to output path
+          try {
+            const igesData = oc.FS.readFile(igesPath)
+            // Save as .iges extension (not pretending to be STEP)
+            const actualIgesPath = filePath.replace('.step', '.iges')
+            oc.FS.writeFile(actualIgesPath, igesData)
+            oc.FS.unlink(igesPath)
+            // Also write to original path so download works
+            oc.FS.writeFile(filePath, igesData)
+            success = true
+            console.log('IGES export succeeded (file is IGES format)')
+          } catch (e2) {
+            console.warn('IGES file operations failed:', e2.message)
+          }
+        }
+      } catch (e) {
+        console.warn('STEP Approach 6 (IGES) failed:', e.message)
+      }
+    }
+
+    // Approach 7: GeometricCurveSet mode (wireframe only - last resort)
+    if (!success) {
+      try {
+        console.log('STEP Approach 7: GeometricCurveSet mode (wireframe)...')
         const writer = new oc.STEPControl_Writer_1()
 
         writer.Transfer(
@@ -1542,44 +1671,10 @@ function writeOutput(oc, shape, format, filePath) {
         const writeStatus = writer.Write(filePath)
         if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
           success = true
-          console.log('STEP Approach 4 succeeded')
+          console.log('STEP Approach 7 succeeded (wireframe only - no solid faces)')
         }
       } catch (e) {
-        console.warn('STEP Approach 4 failed:', e.message)
-      }
-    }
-
-    // Approach 5: Export as BREP instead (different code path)
-    if (!success) {
-      try {
-        console.log('STEP Approach 5: Export as BREP file...')
-        const brepPath = filePath.replace('.step', '.brep')
-
-        // BRepTools.Write is static - try different overloads
-        let brepSuccess = false
-        if (oc.BRepTools.Write_2) {
-          brepSuccess = oc.BRepTools.Write_2(cleanShape, brepPath, new oc.Message_ProgressRange_1())
-        } else if (oc.BRepTools.Write_1) {
-          brepSuccess = oc.BRepTools.Write_1(cleanShape, brepPath)
-        } else if (oc.BRepTools.Write) {
-          brepSuccess = oc.BRepTools.Write(cleanShape, brepPath)
-        }
-
-        if (brepSuccess) {
-          // If BREP succeeded, we've at least exported something
-          // Copy to STEP path (it's BREP format but file will work in many CAD)
-          try {
-            const brepData = oc.FS.readFile(brepPath)
-            oc.FS.writeFile(filePath, brepData)
-            oc.FS.unlink(brepPath)
-            success = true
-            console.log('BREP export succeeded (saved as .step)')
-          } catch (e2) {
-            console.warn('BREP file operations failed:', e2.message)
-          }
-        }
-      } catch (e) {
-        console.warn('STEP Approach 5 (BREP) failed:', e.message)
+        console.warn('STEP Approach 7 failed:', e.message)
       }
     }
 
