@@ -971,38 +971,71 @@ export function convertACISEdge(oc, edgeEntity) {
     const startPt = edgeEntity.getStart ? edgeEntity.getStart() : null
     const endPt = edgeEntity.getEnd ? edgeEntity.getEnd() : null
 
-    // Get start/end points from vertices
+    // Get start/end points from vertices (getStart/getEnd return point coords directly)
     const startVertex = startPt && startPt.point ? startPt.point : startPt
     const endVertex = endPt && endPt.point ? endPt.point : endPt
 
-    const curve = convertACISCurve(oc, curveEntity, startVertex, endVertex)
-    if (!curve) return null
-
-    // Create edge from curve
-    const handleCurve = new oc.Handle_Geom_Curve_2(curve)
-
-    // If we have parameters, use them
-    const param1 = edgeEntity.parameter1
-    const param2 = edgeEntity.parameter2
-
-    let builder
-    if (param1 !== undefined && param2 !== undefined && !isNaN(param1) && !isNaN(param2)) {
-      builder = new oc.BRepBuilderAPI_MakeEdge_24(handleCurve, param1, param2)
-    } else if (startVertex && endVertex) {
-      // Use points to define edge bounds
+    // For straight lines with valid endpoints, use simple point-to-point edge
+    if (startVertex && endVertex) {
       const p1 = makePoint(oc, startVertex)
       const p2 = makePoint(oc, endVertex)
-      builder = new oc.BRepBuilderAPI_MakeEdge_21(handleCurve, p1, p2)
-    } else {
-      builder = new oc.BRepBuilderAPI_MakeEdge_20(handleCurve)
+
+      // Check for degenerate edge
+      const dx = (endVertex.x || 0) - (startVertex.x || 0)
+      const dy = (endVertex.y || 0) - (startVertex.y || 0)
+      const dz = (endVertex.z || 0) - (startVertex.z || 0)
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (dist < 1e-6) return null
+
+      // Try curve-based edge first for non-straight curves
+      const typeName = curveEntity && curveEntity.getType ? curveEntity.getType() : ''
+
+      if (typeName && !typeName.includes('straight')) {
+        // For splines/ellipses, try to use the curve
+        const curve = convertACISCurve(oc, curveEntity, startVertex, endVertex)
+        if (curve) {
+          try {
+            const handleCurve = new oc.Handle_Geom_Curve_2(curve)
+            // BRepBuilderAPI_MakeEdge_20 takes just the curve handle
+            const builder = new oc.BRepBuilderAPI_MakeEdge_20(handleCurve)
+            if (builder.IsDone()) {
+              const edge = builder.Edge()
+              if (edgeEntity.sense === 'reversed') edge.Reverse()
+              return edge
+            }
+          } catch (e) {
+            // Fall through to point-based edge
+          }
+        }
+      }
+
+      // For straight lines or fallback: use BRepBuilderAPI_MakeEdge_3(gp_Pnt, gp_Pnt)
+      try {
+        const builder = new oc.BRepBuilderAPI_MakeEdge_3(p1, p2)
+        if (builder.IsDone()) {
+          const edge = builder.Edge()
+          if (edgeEntity.sense === 'reversed') edge.Reverse()
+          return edge
+        }
+      } catch (e) {
+        console.warn('Point-based edge failed:', e.message)
+      }
     }
 
-    if (builder.IsDone()) {
-      const edge = builder.Edge()
-      if (edgeEntity.sense === 'reversed') {
-        edge.Reverse()
+    // No valid endpoints - try curve only
+    const curve = convertACISCurve(oc, curveEntity, startVertex, endVertex)
+    if (curve) {
+      try {
+        const handleCurve = new oc.Handle_Geom_Curve_2(curve)
+        const builder = new oc.BRepBuilderAPI_MakeEdge_20(handleCurve)
+        if (builder.IsDone()) {
+          const edge = builder.Edge()
+          if (edgeEntity.sense === 'reversed') edge.Reverse()
+          return edge
+        }
+      } catch (e) {
+        console.warn('Curve-based edge failed:', e.message)
       }
-      return edge
     }
   } catch (e) {
     console.warn('Failed to convert edge:', e.message)
@@ -1068,9 +1101,14 @@ export function convertACISFace(oc, faceEntity) {
 
       if (outerWire) {
         try {
-          // BRepBuilderAPI_MakeFace_15 takes (Handle_Geom_Surface, TopoDS_Wire)
-          const faceBuilder = new oc.BRepBuilderAPI_MakeFace_15(handleSurface, outerWire)
+          // First create face from surface with tolerance
+          // BRepBuilderAPI_MakeFace_8 takes (Handle_Geom_Surface, tolerance)
+          const faceBuilder = new oc.BRepBuilderAPI_MakeFace_8(handleSurface, 1e-6)
 
+          // Then add the outer wire
+          faceBuilder.Add(outerWire)
+
+          // Add inner wires (holes)
           for (let i = 1; i < loops.length; i++) {
             const innerWire = convertACISLoop(oc, loops[i])
             if (innerWire) {
