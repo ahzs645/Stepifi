@@ -38,6 +38,8 @@ function stripImports(code) {
 }
 
 function stripExports(code) {
+  // Convert "export async function" to just "async function"
+  code = code.replace(/^export\s+async\s+function\s+/gm, 'async function ')
   // Convert "export function" to just "function"
   code = code.replace(/^export\s+function\s+/gm, 'function ')
   // Convert "export class" to just "class"

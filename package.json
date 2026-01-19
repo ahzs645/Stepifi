@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "build:acis": "node scripts/build-acis-bundle.mjs"
+    "build:acis": "node scripts/build-acis-bundle.mjs",
+    "build:converter": "node scripts/build-converter-bundle.mjs",
+    "build:bundles": "npm run build:acis && npm run build:converter"
   },
   "dependencies": {
     "@react-three/drei": "^9.117.0",

@@ -1,7 +1,7 @@
 /**
  * ACIS Parser Bundle
  * Auto-generated from acis-js modules
- * Generated: 2026-01-19T00:31:51.779Z
+ * Generated: 2026-01-19T01:04:42.019Z
  *
  * For use with Web Workers via importScripts()
  */
@@ -9147,16 +9147,27 @@ function convertACISSurface(oc, surfaceEntity) {
     if (typeName.includes('plane')) {
       return createPlaneSurface(oc, surfaceEntity.origin, surfaceEntity.normal)
     } else if (typeName.includes('cone')) {
-      const ax3 = makeAx3(oc, surfaceEntity.center, surfaceEntity.axis, surfaceEntity.uvOrigin)
-      const radius = surfaceEntity.majorRadius || 1.0
-      const semiAngle = Math.abs(surfaceEntity.semiAngle) || Math.PI / 4
-      if (Math.abs(semiAngle) < 1e-6) {
+      // Get semi-angle from sine/cosine (ACIS stores these instead of angle)
+      const sine = surfaceEntity.sine || 0
+      const cosine = surfaceEntity.cosine || 1
+      const semiAngle = Math.atan2(Math.abs(sine), Math.abs(cosine))
+
+      // Get radius from major vector length
+      const major = surfaceEntity.major || { x: 1, y: 0, z: 0 }
+      const radius = Math.sqrt(major.x * major.x + major.y * major.y + major.z * major.z) || 1.0
+
+      // Create axis system - use major as reference direction
+      const ax3 = makeAx3(oc, surfaceEntity.center, surfaceEntity.axis, major)
+
+      // If semi-angle is very small (sine ≈ 0), it's a cylinder
+      if (Math.abs(sine) < 1e-6) {
         return new oc.Geom_CylindricalSurface_1(ax3, radius)
       }
       return new oc.Geom_ConicalSurface_1(ax3, semiAngle, radius)
     } else if (typeName.includes('sphere')) {
       return createSphericalSurface(oc, surfaceEntity.center, surfaceEntity.radius || 1.0)
     } else if (typeName.includes('torus')) {
+      // Torus stores major/minor as scalar radius values
       const majorRadius = Math.abs(surfaceEntity.major) || 2.0
       const minorRadius = Math.abs(surfaceEntity.minor) || 0.5
       return createToroidalSurface(oc, surfaceEntity.center, surfaceEntity.axis, majorRadius, minorRadius)
