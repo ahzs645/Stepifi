@@ -8,8 +8,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "build:acis": "node scripts/build-acis-bundle.mjs",
-    "build:converter": "node scripts/build-converter-bundle.mjs",
-    "build:bundles": "npm run build:acis && npm run build:converter"
+    "build:converter": "node scripts/build-converter-bundle.mjs --backend=chili",
+    "build:converter:legacy": "node scripts/build-converter-bundle.mjs --backend=legacy",
+    "build:bundles": "npm run build:acis && npm run build:converter",
+    "build:quick-converter": "./scripts/build-quick-converter.sh"
   },
   "dependencies": {
     "@react-three/drei": "^9.117.0",

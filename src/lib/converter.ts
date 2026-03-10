@@ -53,12 +53,19 @@ export interface MeshStats {
   analyzedVertices?: number
 }
 
+export interface MeshData {
+  positions: Float32Array
+  normals: Float32Array
+  indices: Uint32Array
+}
+
 export interface ConversionResult {
   data: Uint8Array
   format: 'step' | 'stl'
   beforeStats?: MeshStats
   afterStats?: MeshStats
   repairs?: string[]
+  outputMesh?: MeshData
 }
 
 export function convertFile(
@@ -69,6 +76,7 @@ export function convertFile(
   onBeforeStats?: (stats: MeshStats) => void,
   onAfterStats?: (stats: MeshStats) => void,
   onRepairLog?: (repairs: string[]) => void,
+  onOutputMesh?: (mesh: MeshData) => void,
 ): Promise<ConversionResult> {
   return new Promise((resolve, reject) => {
     const w = getWorker()
@@ -84,6 +92,7 @@ export function convertFile(
     let beforeStats: MeshStats | undefined
     let afterStats: MeshStats | undefined
     let repairs: string[] = []
+    let outputMesh: MeshData | undefined
 
     w.onmessage = (e: MessageEvent) => {
       const { type, data, message } = e.data
@@ -105,6 +114,10 @@ export function convertFile(
           repairs = data
           onRepairLog?.(data)
           break
+        case 'outputMesh':
+          outputMesh = data
+          onOutputMesh?.(data)
+          break
         case 'complete':
           resolve({
             data: e.data.data,
@@ -112,6 +125,7 @@ export function convertFile(
             beforeStats: e.data.beforeStats || beforeStats,
             afterStats: e.data.afterStats || afterStats,
             repairs: e.data.repairs || repairs,
+            outputMesh,
           })
           break
         case 'error':

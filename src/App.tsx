@@ -1,9 +1,12 @@
 import { useState, useCallback, Suspense, lazy } from 'react'
-import type { ConversionOptions, MeshStats } from '~/lib/converter'
+import type { ConversionOptions, MeshStats, MeshData } from '~/lib/converter'
+import { quickConvertSTLtoSTEP, loadQuickConverter, type QuickConversionOutput } from '~/lib/quick-converter'
 
 const MeshViewer = lazy(() => import('~/components/MeshViewer'))
+const ShapeViewer = lazy(() => import('~/components/ShapeViewer'))
 
-type ConversionStatus = 'idle' | 'loading-occt' | 'converting' | 'analyzing' | 'analyzed' | 'done' | 'error'
+type ConversionStatus = 'idle' | 'loading-occt' | 'loading-quick' | 'converting' | 'analyzing' | 'analyzed' | 'done' | 'error'
+type ConverterMode = 'quick' | 'advanced'
 
 interface ConversionResult {
   blob: Blob | null
@@ -142,6 +145,11 @@ export default function App() {
   const [beforeStats, setBeforeStats] = useState<MeshStats | null>(null)
   const [afterStats, setAfterStats] = useState<MeshStats | null>(null)
   const [repairs, setRepairs] = useState<string[]>([])
+  const [outputMesh, setOutputMesh] = useState<MeshData | null>(null)
+
+  // Converter mode: 'quick' (lightweight stltostp) or 'advanced' (OpenCascade)
+  const [converterMode, setConverterMode] = useState<ConverterMode>('quick')
+  const [quickStats, setQuickStats] = useState<QuickConversionOutput['stats'] | null>(null)
 
   // Conversion options
   const [outputFormat, setOutputFormat] = useState<'step' | 'stl'>('step')
@@ -156,6 +164,8 @@ export default function App() {
     setResult(null)
     setBeforeStats(null)
     setAfterStats(null)
+    setQuickStats(null)
+    setOutputMesh(null)
     const arrayBuffer = await file.arrayBuffer()
     setFileData(arrayBuffer)
   }, [])
@@ -204,10 +214,11 @@ export default function App() {
     if (!fileData || !fileName) return
 
     setStatus('loading-occt')
-    setProgress('Loading OpenCascade.js (~9MB)...')
+    setProgress('Loading OCCT WASM (~15MB)...')
     setBeforeStats(null)
     setAfterStats(null)
     setRepairs([])
+    setOutputMesh(null)
 
     try {
       const { convertFile } = await import('~/lib/converter')
@@ -231,6 +242,7 @@ export default function App() {
         (stats) => setBeforeStats(stats),
         (stats) => setAfterStats(stats),
         (repairLog) => setRepairs(repairLog),
+        (mesh) => setOutputMesh(mesh),
       )
 
       const mimeType = conversionResult.format === 'step' ? 'application/step' : 'model/stl'
@@ -261,11 +273,73 @@ export default function App() {
     }
   }, [fileData, fileName, outputFormat, tolerance, repair, mergeFaces, skipMerge])
 
+  // Quick conversion using lightweight stltostp WASM
+  const handleQuickConvert = useCallback(async () => {
+    if (!fileData || !fileName) return
+
+    // Quick mode only supports STL input
+    if (!fileName.toLowerCase().endsWith('.stl')) {
+      setStatus('error')
+      setResult({
+        blob: null,
+        fileName: '',
+        format: 'step',
+        error: 'Quick mode only supports STL files. Use Advanced mode for 3MF/F3D.',
+      })
+      return
+    }
+
+    setStatus('loading-quick')
+    setProgress('Loading quick converter (~230KB)...')
+    setBeforeStats(null)
+    setAfterStats(null)
+    setQuickStats(null)
+    setRepairs([])
+
+    try {
+      await loadQuickConverter()
+
+      setStatus('converting')
+      setProgress('Converting...')
+
+      const quickResult = await quickConvertSTLtoSTEP(fileData, {
+        tolerance,
+        units: 'mm',
+        schema: '203',
+      })
+
+      if (quickResult.success && quickResult.stepData) {
+        const blob = new Blob([quickResult.stepData], { type: 'application/step' })
+        const baseName = fileName.replace(/\.stl$/i, '')
+
+        setQuickStats(quickResult.stats)
+        setResult({
+          blob,
+          fileName: `${baseName}.stp`,
+          format: 'step',
+        })
+        setStatus('done')
+        setProgress('Conversion complete!')
+      } else {
+        throw new Error(quickResult.error || 'Quick conversion failed')
+      }
+    } catch (err) {
+      setStatus('error')
+      setResult({
+        blob: null,
+        fileName: '',
+        format: 'step',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      })
+      setProgress('')
+    }
+  }, [fileData, fileName, tolerance])
+
   const handleAnalyze = useCallback(async () => {
     if (!fileData || !fileName) return
 
     setStatus('loading-occt')
-    setProgress('Loading OpenCascade.js (~9MB)...')
+    setProgress('Loading OCCT WASM (~15MB)...')
     setBeforeStats(null)
     setAfterStats(null)
     setRepairs([])
@@ -321,7 +395,7 @@ export default function App() {
         </h1>
         <p className="text-gray-400 mt-2">Browser-based STL/3MF/F3D to STEP/STL converter</p>
         <p className="text-gray-500 text-sm mt-1">
-          Powered by OpenCascade.js - runs entirely in your browser
+          Powered by OpenCascade OCCT 7.9.1 - runs entirely in your browser
         </p>
       </header>
 
@@ -364,17 +438,39 @@ export default function App() {
         {/* 3D Preview */}
         {fileData && (
           <div className="mb-8">
-            <h3 className="text-sm font-semibold text-gray-400 mb-3">Preview</h3>
-            <div className="h-72 rounded-xl overflow-hidden bg-gray-900 border border-gray-800">
-              <Suspense
-                fallback={
-                  <div className="h-full flex items-center justify-center text-gray-500">
-                    Loading 3D viewer...
+            <div className={`grid ${outputMesh ? 'grid-cols-1 md:grid-cols-2 gap-4' : 'grid-cols-1'}`}>
+              <div>
+                <h3 className="text-sm font-semibold text-blue-400 mb-3">
+                  {outputMesh ? 'Input' : 'Preview'}
+                </h3>
+                <div className="h-72 rounded-xl overflow-hidden bg-gray-900 border border-gray-800">
+                  <Suspense
+                    fallback={
+                      <div className="h-full flex items-center justify-center text-gray-500">
+                        Loading 3D viewer...
+                      </div>
+                    }
+                  >
+                    <MeshViewer fileData={fileData} fileName={fileName} />
+                  </Suspense>
+                </div>
+              </div>
+              {outputMesh && (
+                <div>
+                  <h3 className="text-sm font-semibold text-green-400 mb-3">Output (Converted)</h3>
+                  <div className="h-72 rounded-xl overflow-hidden bg-gray-900 border border-gray-800">
+                    <Suspense
+                      fallback={
+                        <div className="h-full flex items-center justify-center text-gray-500">
+                          Loading 3D viewer...
+                        </div>
+                      }
+                    >
+                      <ShapeViewer meshData={outputMesh} />
+                    </Suspense>
                   </div>
-                }
-              >
-                <MeshViewer fileData={fileData} fileName={fileName} />
-              </Suspense>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -418,118 +514,162 @@ export default function App() {
           </div>
         )}
 
+        {/* Converter Mode Toggle */}
+        {fileData && status !== 'done' && (
+          <div className="mb-4">
+            <label className="block text-sm text-gray-400 mb-2">Converter Engine</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConverterMode('quick')}
+                className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                  converterMode === 'quick'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                <div className="font-semibold">Quick</div>
+                <div className="text-xs opacity-80">~230KB • Fast • STL only</div>
+              </button>
+              <button
+                onClick={() => setConverterMode('advanced')}
+                className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                  converterMode === 'advanced'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                <div className="font-semibold">Advanced</div>
+                <div className="text-xs opacity-80">~15MB • Repair • All formats</div>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Conversion Options */}
         {fileData && status !== 'done' && (
           <div className="mb-8 p-4 bg-gray-900 border border-gray-800 rounded-xl">
             <h3 className="text-sm font-semibold text-gray-400 mb-4">Conversion Options</h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Output Format */}
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Output Format</label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setOutputFormat('step')}
-                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                      outputFormat === 'step'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                    }`}
-                  >
-                    STEP
-                  </button>
-                  <button
-                    onClick={() => setOutputFormat('stl')}
-                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                      outputFormat === 'stl'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                    }`}
-                  >
-                    STL
-                  </button>
+              {/* Output Format - Only show for Advanced mode */}
+              {converterMode === 'advanced' && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Output Format</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setOutputFormat('step')}
+                      className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                        outputFormat === 'step'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      STEP
+                    </button>
+                    <button
+                      onClick={() => setOutputFormat('stl')}
+                      className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                        outputFormat === 'stl'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      STL
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Tolerance */}
+              {/* Tolerance - Show for both modes */}
               <div>
                 <label className="block text-sm text-gray-400 mb-2">
-                  Tolerance: {tolerance.toFixed(2)}
+                  {converterMode === 'quick' ? 'Edge Merge Tolerance' : 'Tolerance'}: {converterMode === 'quick' ? tolerance.toExponential(0) : tolerance.toFixed(2)}
                 </label>
                 <input
                   type="range"
-                  min="0.01"
-                  max="1"
-                  step="0.01"
-                  value={tolerance}
-                  onChange={(e) => setTolerance(parseFloat(e.target.value))}
+                  min={converterMode === 'quick' ? '-8' : '0.01'}
+                  max={converterMode === 'quick' ? '-4' : '1'}
+                  step={converterMode === 'quick' ? '1' : '0.01'}
+                  value={converterMode === 'quick' ? Math.log10(tolerance) : tolerance}
+                  onChange={(e) => {
+                    if (converterMode === 'quick') {
+                      setTolerance(Math.pow(10, parseFloat(e.target.value)))
+                    } else {
+                      setTolerance(parseFloat(e.target.value))
+                    }
+                  }}
                   className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>Fine (0.01)</span>
-                  <span>Coarse (1.0)</span>
+                  <span>Fine</span>
+                  <span>Coarse</span>
                 </div>
               </div>
 
-              {/* Repair Toggle */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="text-sm text-gray-300">Mesh Repair</label>
-                  <p className="text-xs text-gray-500">Fix common mesh issues</p>
-                </div>
-                <button
-                  onClick={() => setRepair(!repair)}
-                  className={`w-12 h-6 rounded-full transition-colors ${
-                    repair ? 'bg-indigo-600' : 'bg-gray-700'
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 bg-white rounded-full transition-transform ${
-                      repair ? 'translate-x-6' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
+              {/* Advanced mode options */}
+              {converterMode === 'advanced' && (
+                <>
+                  {/* Repair Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm text-gray-300">Mesh Repair</label>
+                      <p className="text-xs text-gray-500">Fix common mesh issues</p>
+                    </div>
+                    <button
+                      onClick={() => setRepair(!repair)}
+                      className={`w-12 h-6 rounded-full transition-colors ${
+                        repair ? 'bg-indigo-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 bg-white rounded-full transition-transform ${
+                          repair ? 'translate-x-6' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
 
-              {/* Merge Faces Toggle */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="text-sm text-gray-300">Merge Faces</label>
-                  <p className="text-xs text-gray-500">Combine coplanar faces</p>
-                </div>
-                <button
-                  onClick={() => setMergeFaces(!mergeFaces)}
-                  className={`w-12 h-6 rounded-full transition-colors ${
-                    mergeFaces ? 'bg-indigo-600' : 'bg-gray-700'
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 bg-white rounded-full transition-transform ${
-                      mergeFaces ? 'translate-x-6' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
+                  {/* Merge Faces Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm text-gray-300">Merge Faces</label>
+                      <p className="text-xs text-gray-500">Combine coplanar faces</p>
+                    </div>
+                    <button
+                      onClick={() => setMergeFaces(!mergeFaces)}
+                      className={`w-12 h-6 rounded-full transition-colors ${
+                        mergeFaces ? 'bg-indigo-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 bg-white rounded-full transition-transform ${
+                          mergeFaces ? 'translate-x-6' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
 
-              {/* Skip Merge Toggle */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="text-sm text-gray-300">Skip Face Merge</label>
-                  <p className="text-xs text-gray-500">Faster but larger STEP files</p>
-                </div>
-                <button
-                  onClick={() => setSkipMerge(!skipMerge)}
-                  className={`w-12 h-6 rounded-full transition-colors ${
-                    skipMerge ? 'bg-indigo-600' : 'bg-gray-700'
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 bg-white rounded-full transition-transform ${
-                      skipMerge ? 'translate-x-6' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
+                  {/* Skip Merge Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm text-gray-300">Skip Face Merge</label>
+                      <p className="text-xs text-gray-500">Faster but larger STEP files</p>
+                    </div>
+                    <button
+                      onClick={() => setSkipMerge(!skipMerge)}
+                      className={`w-12 h-6 rounded-full transition-colors ${
+                        skipMerge ? 'bg-indigo-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 bg-white rounded-full transition-transform ${
+                          skipMerge ? 'translate-x-6' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -538,24 +678,61 @@ export default function App() {
         {fileData && status !== 'done' && (
           <div className="flex gap-3">
             <button
-              onClick={handleConvert}
-              disabled={status === 'loading-occt' || status === 'converting' || status === 'analyzing'}
-              className="flex-1 py-4 px-6 text-lg font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={converterMode === 'quick' ? handleQuickConvert : handleConvert}
+              disabled={status === 'loading-occt' || status === 'loading-quick' || status === 'converting' || status === 'analyzing'}
+              className={`flex-1 py-4 px-6 text-lg font-semibold text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed ${
+                converterMode === 'quick'
+                  ? 'bg-gradient-to-r from-green-600 to-emerald-600'
+                  : 'bg-gradient-to-r from-indigo-600 to-purple-600'
+              }`}
             >
               {status === 'idle' || status === 'error' || status === 'analyzed'
-                ? `Convert to ${outputFormat.toUpperCase()}`
-                : status === 'analyzing'
-                  ? progress
-                  : progress}
+                ? converterMode === 'quick'
+                  ? 'Quick Convert to STEP'
+                  : `Convert to ${outputFormat.toUpperCase()}`
+                : progress}
             </button>
-            <button
-              onClick={handleAnalyze}
-              disabled={status === 'loading-occt' || status === 'converting' || status === 'analyzing'}
-              className="py-4 px-6 text-lg font-semibold text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Analyze mesh quality without converting"
-            >
-              {status === 'analyzing' ? 'Analyzing...' : 'Analyze Only'}
-            </button>
+            {converterMode === 'advanced' && (
+              <button
+                onClick={handleAnalyze}
+                disabled={status === 'loading-occt' || status === 'loading-quick' || status === 'converting' || status === 'analyzing'}
+                className="py-4 px-6 text-lg font-semibold text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Analyze mesh quality without converting"
+              >
+                {status === 'analyzing' ? 'Analyzing...' : 'Analyze Only'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Quick Conversion Stats */}
+        {quickStats && status === 'done' && (
+          <div className="mt-4 mb-4">
+            <h3 className="text-sm font-semibold text-gray-400 mb-3">Conversion Stats</h3>
+            <div className="p-4 rounded-lg border border-green-600 bg-green-900/20">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Triangles</span>
+                  <p className="text-gray-200 font-mono text-lg">{formatNumber(quickStats.triangleCount)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Edges</span>
+                  <p className="text-gray-200 font-mono">
+                    <span className="text-gray-500">{formatNumber(quickStats.totalEdges)}</span>
+                    <span className="text-green-400 mx-1">→</span>
+                    <span className="text-lg">{formatNumber(quickStats.uniqueEdges)}</span>
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Merged</span>
+                  <p className="text-gray-200 font-mono text-lg">{formatNumber(quickStats.mergedEdges)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Reduction</span>
+                  <p className="text-green-400 font-mono text-lg">-{quickStats.edgeReductionPercent.toFixed(0)}%</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -586,6 +763,7 @@ export default function App() {
                 setBeforeStats(null)
                 setAfterStats(null)
                 setRepairs([])
+                setOutputMesh(null)
               }}
               className="w-full mt-2 py-3 px-6 text-sm font-medium text-gray-400 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
             >

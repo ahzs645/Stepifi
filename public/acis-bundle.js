@@ -1,7 +1,7 @@
 /**
  * ACIS Parser Bundle
  * Auto-generated from acis-js modules
- * Generated: 2026-01-19T01:47:30.690Z
+ * Generated: 2026-03-10T03:16:40.080Z
  *
  * For use with Web Workers via importScripts()
  */
@@ -4761,7 +4761,7 @@ class SurfaceCone extends Surface {
     // Python format: center axis major ratio range sine cosine scale sense urange vrange
     ;[this.center, i] = getLocation(chunks, i)
     ;[this.axis, i] = getVector(chunks, i)
-    ;[this.major, i] = getVector(chunks, i)  // Direction vector, not scalar
+    ;[this.major, i] = getLocation(chunks, i)  // Scaled direction+radius vector (matches Python Acis.py)
     ;[this.ratio, i] = getFloat(chunks, i)
     ;[this.range, i] = getInterval(chunks, i, MIN_INF, MAX_INF, getScale())
     ;[this.sine, i] = getFloat(chunks, i)

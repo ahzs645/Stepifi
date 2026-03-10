@@ -20,3 +20,4 @@ dist
 # Logs
 *.log
 npm-debug.log*
+wasm/chili-src/build/target/release

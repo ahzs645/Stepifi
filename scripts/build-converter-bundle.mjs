@@ -2,6 +2,12 @@
 /**
  * Build script for converter.worker.js
  * Bundles all converter-js modules into a single IIFE for web worker use
+ *
+ * Supports two backends:
+ * - 'chili' (default): chili3d's OCCT 7.9.1 WASM build (15MB, faster, cleaner API)
+ * - 'legacy': opencascade.js v2.0.0-beta (48MB, more repair features)
+ *
+ * Usage: node scripts/build-converter-bundle.mjs [--backend=chili|legacy]
  */
 
 import { readFileSync, writeFileSync } from 'fs'
@@ -12,8 +18,26 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const CONVERTER_JS_DIR = join(__dirname, '../public/converter-js')
 const OUTPUT_FILE = join(__dirname, '../public/converter.worker.js')
 
-// Files to bundle in dependency order
-const FILES = [
+// Parse --backend flag
+const args = process.argv.slice(2)
+const backendArg = args.find(a => a.startsWith('--backend='))
+const backend = backendArg ? backendArg.split('=')[1] : 'chili'
+
+// Files to bundle in dependency order (backend-specific)
+const CHILI_FILES = [
+  'config.js',
+  'mesh-utils.js',
+  'mesh-analysis.js',
+  'mesh-repair.js',
+  'format-parsers.js',
+  'chili-init.js',
+  'chili-io.js',
+  'chili-repair.js',
+  'chili-geometry-bridge.js',
+  'chili-worker.js'
+]
+
+const LEGACY_FILES = [
   'config.js',
   'mesh-utils.js',
   'mesh-analysis.js',
@@ -24,6 +48,9 @@ const FILES = [
   'oc-repair.js',
   'worker.js'
 ]
+
+const FILES = backend === 'legacy' ? LEGACY_FILES : CHILI_FILES
+const WORKER_FILE = backend === 'legacy' ? 'worker.js' : 'chili-worker.js'
 
 function stripImports(code) {
   // Remove import statements
@@ -69,16 +96,20 @@ function processFile(filename) {
 }
 
 function buildBundle() {
-  console.log('Building converter.worker.js from converter-js/ modules...')
+  console.log(`Building converter.worker.js (${backend} backend) from converter-js/ modules...`)
+
+  const backendLabel = backend === 'legacy'
+    ? 'OpenCascade.js v2 (legacy)'
+    : 'chili-wasm OCCT 7.9.1'
 
   let bundle = `/**
- * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
+ * Web Worker for ${backendLabel} STL/3MF to STEP/STL conversion
  * Auto-generated from converter-js modules
  * Generated: ${new Date().toISOString()}
+ * Backend: ${backend}
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
- *           large mesh optimization, JavaScript mesh repairs, fallback strategies,
- *           F3D (Fusion 360) ACIS binary support
+ *           large mesh optimization, JavaScript mesh repairs
  */
 
 // Auto-detect base path from worker's own URL (works on GitHub Pages, subdomains, etc.)
@@ -96,29 +127,29 @@ try {
   console.log('ACIS module not loaded (F3D support disabled):', e.message)
 }
 
-let ocInstance = null
+let ${backend === 'legacy' ? 'ocInstance' : 'wasmInstance'} = null
 
 `
 
-  // Process each file (except worker.js which needs special handling)
+  // Process each file (except worker entry which needs special handling)
   for (const file of FILES) {
-    if (file === 'worker.js') continue
+    if (file === WORKER_FILE) continue
     console.log(`  Processing ${file}...`)
     bundle += processFile(file)
   }
 
-  // Process worker.js and remove redundant declarations
-  console.log('  Processing worker.js...')
-  let workerCode = readFileSync(join(CONVERTER_JS_DIR, 'worker.js'), 'utf-8')
+  // Process worker entry and remove redundant declarations
+  console.log(`  Processing ${WORKER_FILE}...`)
+  let workerCode = readFileSync(join(CONVERTER_JS_DIR, WORKER_FILE), 'utf-8')
   workerCode = stripImports(workerCode)
   workerCode = stripExports(workerCode)
 
-  // Remove duplicate WORKER_BASE_PATH and ocInstance declarations from worker.js
-  workerCode = workerCode.replace(/\/\/ Worker base path detection[\s\S]*?let ocInstance = null\s*/m, '')
+  // Remove duplicate WORKER_BASE_PATH and instance declarations from worker
+  workerCode = workerCode.replace(/\/\/ Worker base path detection[\s\S]*?let (?:ocInstance|wasmInstance) = null\s*/m, '')
   // Remove duplicate ACIS loading
   workerCode = workerCode.replace(/\/\/ Load ACIS parser bundle[\s\S]*?console\.log\('ACIS module not loaded[\s\S]*?\}\s*/m, '')
 
-  bundle += `\n// ============================================================================\n// worker.js\n// ============================================================================\n\n`
+  bundle += `\n// ============================================================================\n// ${WORKER_FILE}\n// ============================================================================\n\n`
   bundle += workerCode
 
   // Write the bundle

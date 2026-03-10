@@ -1,11 +1,11 @@
 /**
- * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
+ * Web Worker for chili-wasm OCCT 7.9.1 STL/3MF to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-01-19T02:52:55.441Z
+ * Generated: 2026-03-10T08:46:48.674Z
+ * Backend: chili
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
- *           large mesh optimization, JavaScript mesh repairs, fallback strategies,
- *           F3D (Fusion 360) ACIS binary support
+ *           large mesh optimization, JavaScript mesh repairs
  */
 
 // Auto-detect base path from worker's own URL (works on GitHub Pages, subdomains, etc.)
@@ -23,7 +23,7 @@ try {
   console.log('ACIS module not loaded (F3D support disabled):', e.message)
 }
 
-let ocInstance = null
+let wasmInstance = null
 
 
 // ============================================================================
@@ -1099,48 +1099,58 @@ function parseStlBinary(fileData) {
 }
 
 // ============================================================================
-// oc-init.js
+// chili-init.js
 // ============================================================================
 
 /**
- * OpenCascade Initialization
- * Handles loading and initializing OpenCascade.js in a web worker
+ * Chili-WASM Initialization
+ * Handles loading and initializing chili3d's OpenCascade WASM module (OCCT 7.9.1)
+ * in a web worker context
  */
 
 /**
- * Initialize OpenCascade.js
- * @param {string} basePath - Base path for loading OpenCascade files
+ * Initialize chili-wasm module
+ * @param {string} basePath - Base path for loading WASM files
  * @param {function} postMessage - Worker's postMessage function for progress updates
- * @returns {Promise<Object>} OpenCascade.js instance
+ * @returns {Promise<Object>} Initialized chili-wasm module instance
  */
-async function initOpenCascade(basePath, postMessage) {
-  postMessage({ type: 'progress', message: 'Fetching OpenCascade.js...' })
+async function initChiliWasm(basePath, postMessage) {
+  const cacheVersion = 'v1'
 
-  const response = await fetch(basePath + 'opencascade/opencascade.full.js')
+  postMessage({ type: 'progress', message: 'Fetching chili-wasm.js...' })
+
+  const response = await fetch(basePath + `chili-wasm/chili-wasm.js?${cacheVersion}`)
   let scriptText = await response.text()
+
+  // Replace import.meta.url with a known URL so locateFile can resolve the WASM path
+  const wasmBaseUrl = basePath + 'chili-wasm/'
+  scriptText = scriptText.replace(
+    /import\.meta\.url/g,
+    JSON.stringify(wasmBaseUrl + 'chili-wasm.js')
+  )
 
   // Remove ES module export statements
   scriptText = scriptText.replace(/export\s*\{[^}]*\}\s*;?\s*$/m, '')
   scriptText = scriptText.replace(/export\s+default\s+\w+\s*;?\s*$/m, '')
 
-  postMessage({ type: 'progress', message: 'Parsing OpenCascade.js...' })
+  postMessage({ type: 'progress', message: 'Parsing chili-wasm.js...' })
 
   eval(scriptText)
 
-  postMessage({ type: 'progress', message: 'Initializing WASM (~50MB)...' })
+  postMessage({ type: 'progress', message: 'Initializing WASM (~15MB)...' })
 
   return await Module({
-    locateFile: (file) => basePath + 'opencascade/' + file
+    locateFile: (file) => wasmBaseUrl + file + '?' + cacheVersion
   })
 }
 
 // ============================================================================
-// oc-io.js
+// chili-io.js
 // ============================================================================
 
 /**
- * OpenCascade I/O Functions
- * STL/STEP reading, writing, and mesh analysis
+ * Chili-WASM I/O Functions
+ * STL/STEP/IGES reading, writing, and mesh analysis using chili3d's Converter API
  */
 
 
@@ -1149,9 +1159,9 @@ async function initOpenCascade(basePath, postMessage) {
 // ============================================================================
 
 /**
- * Analyze mesh and return statistics
+ * Analyze mesh and return statistics using chili-wasm APIs
  */
-function analyzeMesh(oc, shape, originalTriangleCount = 0) {
+function analyzeMesh(wasm, shape, originalTriangleCount = 0) {
   const stats = {
     triangleCount: originalTriangleCount,
     vertexCount: 0,
@@ -1166,110 +1176,63 @@ function analyzeMesh(oc, shape, originalTriangleCount = 0) {
   }
 
   try {
-    // Get bounding box
-    const bndBox = new oc.Bnd_Box_1()
-    oc.BRepBndLib.Add(shape, bndBox, false)
-
-    if (!bndBox.IsVoid()) {
-      const xMin = { current: 0 }, yMin = { current: 0 }, zMin = { current: 0 }
-      const xMax = { current: 0 }, yMax = { current: 0 }, zMax = { current: 0 }
-      bndBox.Get(xMin, yMin, zMin, xMax, yMax, zMax)
-      stats.boundingBox = {
-        min: { x: xMin.current, y: yMin.current, z: zMin.current },
-        max: { x: xMax.current, y: yMax.current, z: zMax.current },
-        size: {
-          x: xMax.current - xMin.current,
-          y: yMax.current - yMin.current,
-          z: zMax.current - zMin.current
-        }
-      }
-    }
-
     // Count faces
-    const faceExplorer = new oc.TopExp_Explorer_2(
-      shape,
-      oc.TopAbs_ShapeEnum.TopAbs_FACE,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-    let faceCount = 0
-    while (faceExplorer.More()) {
-      faceCount++
-      faceExplorer.Next()
-    }
-    stats.faceCount = faceCount
+    const faces = wasm.Shape.findSubShapes(shape, wasm.TopAbs_ShapeEnum.TopAbs_FACE)
+    stats.faceCount = faces.length
 
     // Count edges
-    const edgeExplorer = new oc.TopExp_Explorer_2(
-      shape,
-      oc.TopAbs_ShapeEnum.TopAbs_EDGE,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-    let edgeCount = 0
-    while (edgeExplorer.More()) {
-      edgeCount++
-      edgeExplorer.Next()
-    }
-    stats.edgeCount = edgeCount
+    const edges = wasm.Shape.findSubShapes(shape, wasm.TopAbs_ShapeEnum.TopAbs_EDGE)
+    stats.edgeCount = edges.length
 
     // Count vertices
-    const vertexExplorer = new oc.TopExp_Explorer_2(
-      shape,
-      oc.TopAbs_ShapeEnum.TopAbs_VERTEX,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-    let vertexCount = 0
-    while (vertexExplorer.More()) {
-      vertexCount++
-      vertexExplorer.Next()
-    }
-    stats.vertexCount = vertexCount
+    const vertices = wasm.Shape.findSubShapes(shape, wasm.TopAbs_ShapeEnum.TopAbs_VERTEX)
+    stats.vertexCount = vertices.length
 
-    // Check if shape is a solid
-    const solidExplorer = new oc.TopExp_Explorer_2(
-      shape,
-      oc.TopAbs_ShapeEnum.TopAbs_SOLID,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-    stats.isSolid = solidExplorer.More()
+    // Check if shape contains a solid
+    const solids = wasm.Shape.findSubShapes(shape, wasm.TopAbs_ShapeEnum.TopAbs_SOLID)
+    stats.isSolid = solids.length > 0
 
-    // Check if watertight using BRepCheck_Analyzer
+    // Check if closed (watertight)
     try {
-      const analyzer = new oc.BRepCheck_Analyzer(shape, true)
-      stats.isWatertight = analyzer.IsValid()
-      if (!stats.isWatertight) {
-        stats.qualityIssues.push('Shape has validation issues')
-      }
+      stats.isWatertight = wasm.Shape.isClosed(shape)
     } catch (e) {
-      // BRepCheck may fail on some meshes
+      // isClosed may fail on some shapes
     }
 
-    // Try to get volume and surface area using GProp
+    // Calculate volume from solids
+    if (solids.length > 0) {
+      try {
+        for (let i = 0; i < solids.length; i++) {
+          const solid = wasm.TopoDS.solid(solids[i])
+          stats.volume += Math.abs(wasm.Solid.volume(solid))
+        }
+      } catch (e) {
+        // Volume calculation may fail
+      }
+    }
+
+    // Calculate surface area from faces
     try {
-      const props = new oc.GProp_GProps_1()
-      oc.BRepGProp.SurfaceProperties_1(shape, props, false, false)
-      stats.surfaceArea = props.Mass()
-
-      const volProps = new oc.GProp_GProps_1()
-      oc.BRepGProp.VolumeProperties_1(shape, volProps, false, false)
-      stats.volume = volProps.Mass()
-
-      // Negative volume often indicates inverted normals
-      if (stats.volume < 0) {
-        stats.qualityIssues.push('Negative volume (inverted normals)')
-        stats.volume = Math.abs(stats.volume)
+      for (let i = 0; i < faces.length; i++) {
+        const face = wasm.TopoDS.face(faces[i])
+        stats.surfaceArea += wasm.Face.area(face)
       }
     } catch (e) {
-      // Properties calculation failed
+      // Area calculation may fail
     }
 
     // Add quality warnings
     if (!stats.isSolid && stats.faceCount > 0) {
       stats.qualityIssues.push('Not a solid (may have gaps/holes)')
     }
+    if (!stats.isWatertight) {
+      stats.qualityIssues.push('Shape is not closed/watertight')
+    }
     if (stats.faceCount > LARGE_MESH_THRESHOLD) {
       stats.qualityIssues.push(`Large mesh (${stats.faceCount.toLocaleString()} faces)`)
     }
 
+    // findSubShapes returns plain JS arrays, no cleanup needed
   } catch (e) {
     console.error('Mesh analysis error:', e)
   }
@@ -1278,29 +1241,52 @@ function analyzeMesh(oc, shape, originalTriangleCount = 0) {
 }
 
 // ============================================================================
+// Shape Tessellation (for 3D preview)
+// ============================================================================
+
+/**
+ * Tessellate a shape and return mesh data for 3D rendering
+ * @returns {{ positions: Float32Array, normals: Float32Array, indices: Uint32Array } | null}
+ */
+function tessellateShape(wasm, shape, deflection = 0.5) {
+  try {
+    const mesher = new wasm.Mesher(shape, deflection)
+    const meshData = mesher.mesh()
+    const faceMesh = meshData.faceMeshData
+
+    // Copy to standalone typed arrays (they'll be transferred)
+    const positions = new Float32Array(faceMesh.position)
+    const normals = new Float32Array(faceMesh.normal)
+    const indices = new Uint32Array(faceMesh.index)
+
+    meshData.delete()
+    mesher.delete()
+
+    if (positions.length === 0) return null
+    return { positions, normals, indices }
+  } catch (e) {
+    console.warn('Tessellation failed:', e.message)
+    return null
+  }
+}
+
+// ============================================================================
 // STL Reading
 // ============================================================================
 
 /**
- * Read STL file into shape
+ * Read STL file and return shape using chili-wasm Converter
+ * @param {Object} wasm - chili-wasm module instance
+ * @param {Uint8Array} stlData - STL file data
+ * @returns {Object} TopoDS_Shape
  */
-function readStl(oc, filePath) {
-  const reader = new oc.StlAPI_Reader()
-  const shape = new oc.TopoDS_Shape()
-
-  let success = false
-  if (reader.Read_1) {
-    success = reader.Read_1(shape, filePath)
-  } else if (reader.Read_2) {
-    success = reader.Read_2(shape, filePath)
-  } else if (reader.Read) {
-    success = reader.Read(shape, filePath)
-  }
-
-  if (!success) {
+function readStl(wasm, stlData) {
+  const node = wasm.Converter.convertFromStl(stlData)
+  if (!node || !node.shape) {
     throw new Error('Failed to read STL file')
   }
-
+  const shape = wasm.Shape.clone(node.shape)
+  node.delete()
   return shape
 }
 
@@ -1309,524 +1295,149 @@ function readStl(oc, filePath) {
 // ============================================================================
 
 /**
- * Count shapes of a specific type in a compound
- */
-function countShapes(oc, shape, shapeType) {
-  let count = 0
-  try {
-    const explorer = new oc.TopExp_Explorer_2(
-      shape,
-      shapeType,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-    while (explorer.More()) {
-      count++
-      explorer.Next()
-    }
-  } catch (e) {
-    // Explorer may fail on some shapes
-  }
-  return count
-}
-
-/**
- * Deep validate shape by checking each face's surface
- * Returns true if all faces are valid
- */
-function deepValidateShape(oc, shape) {
-  let validFaces = 0
-  let invalidFaces = 0
-
-  try {
-    const faceExplorer = new oc.TopExp_Explorer_2(
-      shape,
-      oc.TopAbs_ShapeEnum.TopAbs_FACE,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-
-    while (faceExplorer.More()) {
-      try {
-        const face = oc.TopoDS.Face_1(faceExplorer.Current())
-        // Try to get the surface - this is where null pointers would crash
-        const surface = oc.BRep_Tool.Surface_2(face)
-        if (surface && !surface.IsNull()) {
-          validFaces++
-        } else {
-          invalidFaces++
-        }
-      } catch (e) {
-        invalidFaces++
-      }
-      faceExplorer.Next()
-    }
-  } catch (e) {
-    console.warn('Face validation failed:', e.message)
-  }
-
-  console.log(`Deep validation: ${validFaces} valid faces, ${invalidFaces} invalid faces`)
-  return invalidFaces === 0
-}
-
-/**
  * Write output file (STEP or STL)
+ * Returns Uint8Array of the output data
  */
-function writeOutput(oc, shape, format, filePath) {
-  // Validate shape before export
+function writeOutput(wasm, shape, format) {
   if (!shape) {
     throw new Error('No shape to export')
   }
 
   try {
-    if (shape.IsNull()) {
+    if (shape.isNull()) {
       throw new Error('Shape is null/empty')
     }
   } catch (e) {
-    // IsNull check may not be available
+    // isNull check may not be available on all shapes
   }
 
-  // Count actual geometry content
-  const faceCount = countShapes(oc, shape, oc.TopAbs_ShapeEnum.TopAbs_FACE)
-  const edgeCount = countShapes(oc, shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE)
-  const shellCount = countShapes(oc, shape, oc.TopAbs_ShapeEnum.TopAbs_SHELL)
-  const solidCount = countShapes(oc, shape, oc.TopAbs_ShapeEnum.TopAbs_SOLID)
+  if (format === 'step') {
+    // Use Converter.convertToStep which returns a string
+    const shapes = [shape]
+    const stepString = wasm.Converter.convertToStep(shapes)
 
-  console.log(`Shape validation: ${faceCount} faces, ${edgeCount} edges, ${shellCount} shells, ${solidCount} solids`)
-
-  if (faceCount === 0 && edgeCount === 0) {
-    throw new Error('Shape has no geometry (0 faces, 0 edges)')
-  }
-
-  // Deep validate to catch null surface pointers
-  const isDeepValid = deepValidateShape(oc, shape)
-  if (!isDeepValid) {
-    console.warn('Shape has invalid faces - STEP export may fail')
-  }
-
-  // Get shape type for debugging
-  try {
-    const shapeType = shape.ShapeType()
-    const typeValue = shapeType.value !== undefined ? shapeType.value : shapeType
-    console.log(`Shape type: ${typeValue} (0=COMPOUND, 1=COMPSOLID, 2=SOLID, 3=SHELL, 4=FACE)`)
-  } catch (e) {
-    console.log('Could not determine shape type')
-  }
-
-  if (format === 'stl') {
-    // Use static StlAPI.Write method - third parameter is ASCII mode (false = binary)
-    const success = oc.StlAPI.Write(shape, filePath, false)
-    if (!success) {
-      throw new Error('Failed to write STL file')
+    if (!stepString || stepString.length === 0) {
+      throw new Error('STEP export produced empty output')
     }
+
+    // Convert string to Uint8Array
+    const encoder = new TextEncoder()
+    return encoder.encode(stepString)
+  } else if (format === 'iges') {
+    const shapes = [shape]
+    const igesString = wasm.Converter.convertToIges(shapes)
+
+    if (!igesString || igesString.length === 0) {
+      throw new Error('IGES export produced empty output')
+    }
+
+    const encoder = new TextEncoder()
+    return encoder.encode(igesString)
   } else {
-    // STEP format - try multiple approaches
-    let success = false
+    // STL format - use Mesher to tessellate, then build binary STL
+    const mesher = new wasm.Mesher(shape, 0.1) // deflection angle
+    const meshData = mesher.mesh()
+    const faceMesh = meshData.faceMeshData
 
-    // First try: Rebuild compound with only validated faces
-    let cleanShape = shape
-    if (!isDeepValid) {
-      console.log('Attempting to rebuild shape with only valid faces...')
-      try {
-        const builder = new oc.BRep_Builder()
-        const compound = new oc.TopoDS_Compound()
-        builder.MakeCompound(compound)
+    const positions = faceMesh.position
+    const normals = faceMesh.normal
+    const indices = faceMesh.index
 
-        let addedFaces = 0
-        const faceExplorer = new oc.TopExp_Explorer_2(
-          shape,
-          oc.TopAbs_ShapeEnum.TopAbs_FACE,
-          oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-        )
+    // Build binary STL from mesh data
+    const numTriangles = indices.length / 3
+    const buffer = new ArrayBuffer(84 + numTriangles * 50)
+    const view = new DataView(buffer)
 
-        while (faceExplorer.More()) {
-          try {
-            const face = oc.TopoDS.Face_1(faceExplorer.Current())
-            const surface = oc.BRep_Tool.Surface_2(face)
-            if (surface && !surface.IsNull()) {
-              builder.Add(compound, face)
-              addedFaces++
-            }
-          } catch (e) {
-            // Skip invalid face
-          }
-          faceExplorer.Next()
-        }
+    // Header (80 bytes) + triangle count
+    view.setUint32(80, numTriangles, true)
 
-        if (addedFaces > 0) {
-          console.log(`Rebuilt compound with ${addedFaces} valid faces`)
-          cleanShape = compound
-        }
-      } catch (e) {
-        console.warn('Failed to rebuild shape:', e.message)
-      }
+    let offset = 84
+    for (let i = 0; i < indices.length; i += 3) {
+      const i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2]
+
+      // Normal (average of vertex normals)
+      const nx = (normals[i0 * 3] + normals[i1 * 3] + normals[i2 * 3]) / 3
+      const ny = (normals[i0 * 3 + 1] + normals[i1 * 3 + 1] + normals[i2 * 3 + 1]) / 3
+      const nz = (normals[i0 * 3 + 2] + normals[i1 * 3 + 2] + normals[i2 * 3 + 2]) / 3
+      view.setFloat32(offset, nx, true); offset += 4
+      view.setFloat32(offset, ny, true); offset += 4
+      view.setFloat32(offset, nz, true); offset += 4
+
+      // Vertex 1
+      view.setFloat32(offset, positions[i0 * 3], true); offset += 4
+      view.setFloat32(offset, positions[i0 * 3 + 1], true); offset += 4
+      view.setFloat32(offset, positions[i0 * 3 + 2], true); offset += 4
+      // Vertex 2
+      view.setFloat32(offset, positions[i1 * 3], true); offset += 4
+      view.setFloat32(offset, positions[i1 * 3 + 1], true); offset += 4
+      view.setFloat32(offset, positions[i1 * 3 + 2], true); offset += 4
+      // Vertex 3
+      view.setFloat32(offset, positions[i2 * 3], true); offset += 4
+      view.setFloat32(offset, positions[i2 * 3 + 1], true); offset += 4
+      view.setFloat32(offset, positions[i2 * 3 + 2], true); offset += 4
+
+      // Attribute byte count
+      view.setUint16(offset, 0, true); offset += 2
     }
 
-    // Approach 1: Standard STEPControl_Writer
-    if (!success) {
-      try {
-        console.log('STEP Approach 1: STEPControl_Writer...')
-        const writer = new oc.STEPControl_Writer_1()
+    // Cleanup embind objects
+    meshData.delete()
+    mesher.delete()
 
-        console.log('Transferring shape to STEP...')
-        writer.Transfer(
-          cleanShape,
-          oc.STEPControl_StepModelType.STEPControl_AsIs,
-          true,
-          new oc.Message_ProgressRange_1()
-        )
-
-        console.log('Writing STEP to file...')
-        const writeStatus = writer.Write(filePath)
-        console.log('STEP write completed with status:', writeStatus)
-        if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-          success = true
-        }
-      } catch (e) {
-        console.warn('STEP Approach 1 failed:', e.message)
-      }
-    }
-
-    // Approach 2: Try with STEPControl_ManifoldSolidBrep mode
-    if (!success) {
-      try {
-        console.log('STEP Approach 2: ManifoldSolidBrep mode...')
-        const writer = new oc.STEPControl_Writer_1()
-
-        writer.Transfer(
-          cleanShape,
-          oc.STEPControl_StepModelType.STEPControl_ManifoldSolidBrep,
-          true,
-          new oc.Message_ProgressRange_1()
-        )
-
-        const writeStatus = writer.Write(filePath)
-        if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-          success = true
-          console.log('STEP Approach 2 succeeded')
-        }
-      } catch (e) {
-        console.warn('STEP Approach 2 failed:', e.message)
-      }
-    }
-
-    // Approach 3: Try with ShellBasedSurfaceModel mode
-    if (!success) {
-      try {
-        console.log('STEP Approach 3: ShellBasedSurfaceModel mode...')
-        const writer = new oc.STEPControl_Writer_1()
-
-        writer.Transfer(
-          cleanShape,
-          oc.STEPControl_StepModelType.STEPControl_ShellBasedSurfaceModel,
-          true,
-          new oc.Message_ProgressRange_1()
-        )
-
-        const writeStatus = writer.Write(filePath)
-        if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-          success = true
-          console.log('STEP Approach 3 succeeded')
-        }
-      } catch (e) {
-        console.warn('STEP Approach 3 failed:', e.message)
-      }
-    }
-
-    // Approach 4: Try BREP round-trip (export to BREP, re-import, then STEP)
-    if (!success) {
-      try {
-        console.log('STEP Approach 4: BREP round-trip...')
-        const brepPath = '/temp_export.brep'
-
-        // Export as BREP first using Write_3 (the working method)
-        let brepSuccess = false
-
-        // Write_3 takes (shape, filename, progressRange) and works!
-        if (!brepSuccess && oc.BRepTools.Write_3) {
-          try {
-            brepSuccess = oc.BRepTools.Write_3(cleanShape, brepPath, new oc.Message_ProgressRange_1())
-            console.log('  BRepTools.Write_3 succeeded')
-          } catch (e) {
-            console.log('  BRepTools.Write_3 failed:', e.message)
-          }
-        }
-
-        if (brepSuccess) {
-          console.log('  BREP export succeeded, re-importing...')
-          // Re-import the BREP
-          const reimportedShape = new oc.TopoDS_Shape()
-          const brepBuilder = new oc.BRep_Builder()
-          const readSuccess = oc.BRepTools.Read_2(reimportedShape, brepPath, brepBuilder, new oc.Message_ProgressRange_1())
-
-          if (readSuccess && !reimportedShape.IsNull()) {
-            console.log('  BREP re-import succeeded, exporting to STEP...')
-            // Now try STEP export with the re-imported shape
-            const writer = new oc.STEPControl_Writer_1()
-            writer.Transfer(
-              reimportedShape,
-              oc.STEPControl_StepModelType.STEPControl_AsIs,
-              true,
-              new oc.Message_ProgressRange_1()
-            )
-
-            const writeStatus = writer.Write(filePath)
-            if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-              success = true
-              console.log('STEP Approach 4 (BREP round-trip) succeeded')
-            }
-          }
-
-          // Cleanup temp file
-          try { oc.FS.unlink(brepPath) } catch (e) {}
-        }
-      } catch (e) {
-        console.warn('STEP Approach 4 failed:', e.message)
-      }
-    }
-
-    // Approach 5: Direct BREP export (save as .brep file - real solid geometry)
-    if (!success) {
-      try {
-        console.log('STEP Approach 5: Direct BREP export...')
-        const brepPath = filePath.replace('.step', '.brep')
-
-        let brepSuccess = false
-
-        // Write_3 takes (shape, filename, progressRange) and works!
-        if (oc.BRepTools.Write_3) {
-          try {
-            brepSuccess = oc.BRepTools.Write_3(cleanShape, brepPath, new oc.Message_ProgressRange_1())
-            console.log('  BRepTools.Write_3 succeeded')
-          } catch (e) {
-            console.log('  BRepTools.Write_3 failed:', e.message)
-          }
-        }
-
-        if (brepSuccess) {
-          // Read BREP and save to original STEP path
-          try {
-            const brepData = oc.FS.readFile(brepPath)
-            oc.FS.writeFile(filePath, brepData)
-            oc.FS.unlink(brepPath)
-            success = true
-            console.log('BREP export succeeded (note: file is BREP format, not STEP)')
-          } catch (e2) {
-            console.warn('BREP file operations failed:', e2.message)
-          }
-        }
-      } catch (e) {
-        console.warn('STEP Approach 5 failed:', e.message)
-      }
-    }
-
-    // Approach 6: Try IGES export (different code path, might work where STEP fails)
-    if (!success && oc.IGESControl_Writer_1) {
-      try {
-        console.log('STEP Approach 6: IGES export (alternative format)...')
-        const igesPath = filePath.replace('.step', '.iges')
-
-        // Initialize IGES controller first (required!)
-        oc.IGESControl_Controller.Init()
-
-        const igesWriter = new oc.IGESControl_Writer_1()
-        // AddShape with progress range
-        igesWriter.AddShape(cleanShape, new oc.Message_ProgressRange_1())
-        igesWriter.ComputeModel()
-        // Write_2 takes (filename, progressRange)
-        const igesStatus = igesWriter.Write_2(igesPath, new oc.Message_ProgressRange_1())
-
-        if (igesStatus) {
-          // Read IGES file and save to output path
-          try {
-            const igesData = oc.FS.readFile(igesPath)
-            // Save as .iges extension (not pretending to be STEP)
-            const actualIgesPath = filePath.replace('.step', '.iges')
-            oc.FS.writeFile(actualIgesPath, igesData)
-            oc.FS.unlink(igesPath)
-            // Also write to original path so download works
-            oc.FS.writeFile(filePath, igesData)
-            success = true
-            console.log('IGES export succeeded (file is IGES format)')
-          } catch (e2) {
-            console.warn('IGES file operations failed:', e2.message)
-          }
-        }
-      } catch (e) {
-        console.warn('STEP Approach 6 (IGES) failed:', e.message)
-      }
-    }
-
-    // Approach 7: GeometricCurveSet mode (wireframe only - last resort)
-    if (!success) {
-      try {
-        console.log('STEP Approach 7: GeometricCurveSet mode (wireframe)...')
-        const writer = new oc.STEPControl_Writer_1()
-
-        writer.Transfer(
-          cleanShape,
-          oc.STEPControl_StepModelType.STEPControl_GeometricCurveSet,
-          true,
-          new oc.Message_ProgressRange_1()
-        )
-
-        const writeStatus = writer.Write(filePath)
-        if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-          success = true
-          console.log('STEP Approach 7 succeeded (wireframe only - no solid faces)')
-        }
-      } catch (e) {
-        console.warn('STEP Approach 7 failed:', e.message)
-      }
-    }
-
-    if (!success) {
-      console.error('All STEP export approaches failed')
-      throw new Error('STEP_EXPORT_FAILED')
-    }
+    return new Uint8Array(buffer)
   }
 }
 
 // ============================================================================
-// oc-repair.js
+// Format Import
 // ============================================================================
 
 /**
- * OpenCascade Repair Functions
- * Mesh repair, face merging, and shape processing using OpenCascade.js
+ * Read STEP file and return shape
  */
-
-
-/**
- * Perform mesh repair operations using OpenCascade ShapeFix
- */
-function repairMesh(oc, shape, options = {}, postMessage) {
-  const { harmonizeNormals = true } = options
-
-  let repairedShape = shape
-  const repairs = []
-
-  try {
-    // Use ShapeFix_Shape for general repairs
-    postMessage({ type: 'progress', message: 'Repairing mesh...' })
-
-    const fixer = new oc.ShapeFix_Shape_1()
-    fixer.Init(repairedShape)
-    fixer.SetPrecision(0.01)
-    fixer.SetMaxTolerance(1.0)
-    fixer.SetMinTolerance(0.001)
-
-    // Perform fixes
-    if (fixer.Perform(new oc.Message_ProgressRange_1())) {
-      repairedShape = fixer.Shape()
-      repairs.push('Applied ShapeFix repairs')
-    }
-  } catch (e) {
-    console.log('ShapeFix failed, continuing:', e.message)
+function readStep(wasm, stepData) {
+  const node = wasm.Converter.convertFromStep(stepData)
+  if (!node || !node.shape) {
+    throw new Error('Failed to read STEP file')
   }
-
-  try {
-    // Fix shell orientation
-    const shellFix = new oc.ShapeFix_Shell_1()
-
-    const shellExplorer = new oc.TopExp_Explorer_2(
-      repairedShape,
-      oc.TopAbs_ShapeEnum.TopAbs_SHELL,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-
-    if (shellExplorer.More()) {
-      const shell = oc.TopoDS.Shell_1(shellExplorer.Current())
-      shellFix.Init(shell)
-
-      if (harmonizeNormals) {
-        shellFix.FixFaceOrientation(shell, true, false)
-        repairs.push('Harmonized face orientations')
-      }
-    }
-  } catch (e) {
-    console.log('Shell fix failed:', e.message)
-  }
-
-  return { shape: repairedShape, repairs }
+  const shape = wasm.Shape.clone(node.shape)
+  node.delete()
+  return shape
 }
 
 /**
- * Merge coplanar faces using ShapeUpgrade_UnifySameDomain with 3-tier fallback
+ * Read IGES file and return shape
  */
-function mergeFacesWithFallback(oc, shape, tolerance = 0.1, repairs = [], postMessage) {
-  // Strategy 1: Full unification with edge unification
-  try {
-    postMessage({ type: 'progress', message: 'Merging faces (strategy 1: full)...' })
-    const unify = new oc.ShapeUpgrade_UnifySameDomain_2(shape, true, true, false)
-    unify.SetAngularTolerance(0.01) // Angular tolerance in radians
-    unify.SetLinearTolerance(tolerance * 10) // More aggressive tolerance
-    unify.Build()
-
-    const result = unify.Shape()
-    if (result && !result.IsNull()) {
-      repairs.push('Merged faces using full unification')
-      return { shape: result, success: true }
-    }
-  } catch (e) {
-    console.log('Strategy 1 failed:', e.message)
+function readIges(wasm, igesData) {
+  const node = wasm.Converter.convertFromIges(igesData)
+  if (!node || !node.shape) {
+    throw new Error('Failed to read IGES file')
   }
-
-  // Strategy 2: Face unification only (no edge unification)
-  try {
-    postMessage({ type: 'progress', message: 'Merging faces (strategy 2: faces only)...' })
-    const unify = new oc.ShapeUpgrade_UnifySameDomain_2(shape, true, false, false)
-    unify.SetAngularTolerance(0.01)
-    unify.SetLinearTolerance(tolerance)
-    unify.Build()
-
-    const result = unify.Shape()
-    if (result && !result.IsNull()) {
-      repairs.push('Merged faces (without edge unification)')
-      return { shape: result, success: true }
-    }
-  } catch (e) {
-    console.log('Strategy 2 failed:', e.message)
-  }
-
-  // Strategy 3: Relaxed tolerance
-  try {
-    postMessage({ type: 'progress', message: 'Merging faces (strategy 3: relaxed)...' })
-    const unify = new oc.ShapeUpgrade_UnifySameDomain_2(shape, true, true, false)
-    unify.SetAngularTolerance(0.1) // More permissive angular tolerance
-    unify.SetLinearTolerance(tolerance * 100) // Much larger linear tolerance
-    unify.Build()
-
-    const result = unify.Shape()
-    if (result && !result.IsNull()) {
-      repairs.push('Merged faces with relaxed tolerance')
-      return { shape: result, success: true }
-    }
-  } catch (e) {
-    console.log('Strategy 3 failed:', e.message)
-  }
-
-  // All strategies failed
-  repairs.push('Face merging skipped (all strategies failed)')
-  return { shape, success: false }
+  const shape = wasm.Shape.clone(node.shape)
+  node.delete()
+  return shape
 }
 
-/**
- * Legacy wrapper for backward compatibility
- */
-function mergeFaces(oc, shape, tolerance = 0.1, postMessage) {
-  const result = mergeFacesWithFallback(oc, shape, tolerance, [], postMessage)
-  return result.shape
-}
+// ============================================================================
+// chili-repair.js
+// ============================================================================
 
 /**
- * Process a single mesh/shape and create solid
- * Includes large mesh optimization and repair tracking
+ * Chili-WASM Repair Functions
+ * Shape repair and processing using chili3d's higher-level APIs
+ */
+
+
+/**
+ * Process a shape: try to create solid and optionally simplify
  *
- * Tolerance scaling (like FreeCAD):
- * - Base tolerance: user-specified tolerance
- * - Sewing tolerance: base * 5
- * - Merge tolerance: base * 10
+ * Uses chili-wasm's available operations:
+ * - Shape.findSubShapes: find shells in the shape
+ * - ShapeFactory.solid: create solid from shells
+ * - ShapeFactory.simplifyShape: simplify/unify the shape
+ * - Shape.sewing: sew shapes together
  */
-function processShape(oc, shape, options = {}, postMessage) {
+function processShape(wasm, shape, options = {}, postMessage) {
   const {
     tolerance = 0.1,
     repair = true,
@@ -1834,10 +1445,6 @@ function processShape(oc, shape, options = {}, postMessage) {
     skipMerge: forceSkipMerge = false,
     faceCount = 0
   } = options
-
-  // Apply tolerance scaling like FreeCAD
-  const sewingTolerance = tolerance * 5   // 5x for sewing operations
-  const mergeTolerance = tolerance * 10   // 10x for face merging
 
   const repairs = []
   let processedShape = shape
@@ -1854,93 +1461,1226 @@ function processShape(oc, shape, options = {}, postMessage) {
     repairs.push(`Large mesh optimization enabled (>${LARGE_MESH_THRESHOLD.toLocaleString()} faces)`)
   }
 
-  // Sewing
-  postMessage({ type: 'progress', message: 'Sewing faces...' })
-  try {
-    const actualSewingTolerance = skipExpensive ? sewingTolerance * 2 : sewingTolerance
-    const sewing = new oc.BRepBuilderAPI_Sewing(actualSewingTolerance, true, true, true, false)
-    sewing.Add(processedShape)
-    sewing.Perform(new oc.Message_ProgressRange_1())
-    processedShape = sewing.SewedShape()
-    repairs.push('Sewed mesh faces')
-  } catch (e) {
-    console.log('Sewing failed:', e.message)
-    repairs.push('Sewing skipped (failed)')
-  }
-
-  // Repair (skip expensive checks for large meshes)
-  if (repair && !skipExpensive) {
-    const repairResult = repairMesh(oc, processedShape, options, postMessage)
-    processedShape = repairResult.shape
-    repairs.push(...repairResult.repairs)
-  } else if (repair && skipExpensive) {
-    // Simplified repair for large meshes
-    postMessage({ type: 'progress', message: 'Applying basic repairs (large mesh mode)...' })
+  // Try to create solid from shells
+  if (repair) {
+    postMessage({ type: 'progress', message: 'Creating solid...' })
     try {
-      const fixer = new oc.ShapeFix_Shape_1()
-      fixer.Init(processedShape)
-      fixer.SetPrecision(0.1) // Coarser precision for speed
-      fixer.SetMaxTolerance(1.0)
-      if (fixer.Perform(new oc.Message_ProgressRange_1())) {
-        processedShape = fixer.Shape()
-        repairs.push('Applied basic ShapeFix repairs (large mesh mode)')
+      const shells = wasm.Shape.findSubShapes(processedShape, wasm.TopAbs_ShapeEnum.TopAbs_SHELL)
+
+      if (shells.length > 0) {
+        // Convert to proper shell types
+        const shellArray = []
+        for (let i = 0; i < shells.length; i++) {
+          shellArray.push(wasm.TopoDS.shell(shells[i]))
+        }
+
+        const solidResult = wasm.ShapeFactory.solid(shellArray)
+        if (solidResult.isOk) {
+          processedShape = wasm.Shape.clone(solidResult.shape)
+          repairs.push('Created solid from shell(s)')
+          postMessage({ type: 'progress', message: 'Solid created successfully' })
+        } else {
+          console.log('Solid creation returned error:', solidResult.error)
+          repairs.push('Solid creation skipped (' + solidResult.error + ')')
+        }
+        solidResult.delete()
+      } else {
+        repairs.push('No shells found to create solid')
       }
+
+      // findSubShapes returns plain JS arrays, no cleanup needed
     } catch (e) {
-      console.log('Basic repair failed:', e.message)
+      console.log('Solid creation failed:', e.message)
+      repairs.push('Solid creation skipped (failed)')
     }
   }
 
-  // Create solid
-  postMessage({ type: 'progress', message: 'Creating solid...' })
-  let solidShape = processedShape
-
-  try {
-    const shellExplorer = new oc.TopExp_Explorer_2(
-      processedShape,
-      oc.TopAbs_ShapeEnum.TopAbs_SHELL,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-
-    if (shellExplorer.More()) {
-      const shell = oc.TopoDS.Shell_1(shellExplorer.Current())
-      const solidMaker = new oc.BRepBuilderAPI_MakeSolid_2(shell)
-
-      if (solidMaker.IsDone()) {
-        solidShape = solidMaker.Solid()
-        repairs.push('Created solid from shell')
-        postMessage({ type: 'progress', message: 'Solid created successfully' })
+  // Simplify shape (replaces face merging / UnifySameDomain)
+  if (mergeFacesOpt && !skipMerge && !skipExpensive) {
+    postMessage({ type: 'progress', message: 'Simplifying shape...' })
+    try {
+      const simplified = wasm.ShapeFactory.simplifyShape(processedShape, true, true)
+      if (simplified.isOk) {
+        processedShape = wasm.Shape.clone(simplified.shape)
+        repairs.push('Simplified/unified shape domains')
+      } else {
+        console.log('Simplification returned error:', simplified.error)
       }
+      simplified.delete()
+    } catch (e) {
+      console.log('Shape simplification failed:', e.message)
+      repairs.push('Shape simplification skipped')
     }
-  } catch (e) {
-    console.log('Solid creation failed, using shell:', e.message)
-    repairs.push('Solid creation skipped (using shell)')
-  }
-
-  // Merge faces (skip for very large meshes or if explicitly skipped)
-  if (mergeFacesOpt && !skipMerge) {
-    const mergeResult = mergeFacesWithFallback(oc, solidShape, mergeTolerance, repairs, postMessage)
-    solidShape = mergeResult.shape
   } else if (forceSkipMerge) {
     repairs.push('Face merging skipped (user option)')
-  } else if (mergeFacesOpt && skipMerge) {
+  } else if (skipMerge) {
     postMessage({
       type: 'progress',
-      message: `Skipping face merge (>${VERY_LARGE_MESH_THRESHOLD.toLocaleString()} faces)`
+      message: `Skipping simplification (>${VERY_LARGE_MESH_THRESHOLD.toLocaleString()} faces)`
     })
-    repairs.push(`Face merging skipped (>${VERY_LARGE_MESH_THRESHOLD.toLocaleString()} faces)`)
+    repairs.push(`Simplification skipped (>${VERY_LARGE_MESH_THRESHOLD.toLocaleString()} faces)`)
   }
 
-  return { shape: solidShape, repairs }
+  return { shape: processedShape, repairs }
 }
 
 // ============================================================================
-// worker.js
+// chili-geometry-bridge.js
 // ============================================================================
 
 /**
- * Web Worker Message Handler
- * Handles analyze and convert messages for STL/3MF/F3D to STEP/STL conversion
+ * Chili-WASM Geometry Bridge
+ * Converts ACIS parsed entities to OpenCascade shapes using chili-wasm API
+ * Adapted from acis-js/geometry-builder.js for chili-wasm's embind API
+ *
+ * Key API differences from opencascade.js:
+ * - No numbered constructor suffixes (gp_Pnt vs gp_Pnt_3)
+ * - camelCase methods (isDone vs IsDone, edge vs Edge)
+ * - BRep_Builder uses return-value pattern (makeShell() returns shell)
+ * - Bnd_Box.get() returns {xmin,ymin,zmin,xmax,ymax,zmax} object
  */
+
+// ============================================================================
+// Basic Geometry Helpers
+// ============================================================================
+
+const MAX_COORD = 1e10
+
+function clampCoord(val) {
+  const v = val || 0
+  if (!isFinite(v) || Math.abs(v) > MAX_COORD) return 0
+  return v
+}
+
+function makePoint(wasm, p) {
+  if (!p) return new wasm.gp_Pnt(0, 0, 0)
+  return new wasm.gp_Pnt(clampCoord(p.x), clampCoord(p.y), clampCoord(p.z))
+}
+
+function makeDirection(wasm, vec) {
+  if (!vec) return new wasm.gp_Dir(0, 0, 1)
+  const len = Math.sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z)
+  if (len < 1e-10) return new wasm.gp_Dir(0, 0, 1)
+  return new wasm.gp_Dir(vec.x / len, vec.y / len, vec.z / len)
+}
+
+function makeAx1(wasm, origin, direction) {
+  return new wasm.gp_Ax1(makePoint(wasm, origin), makeDirection(wasm, direction))
+}
+
+function makeAx2(wasm, origin, zDir, xDir) {
+  const pnt = makePoint(wasm, origin)
+  const z = makeDirection(wasm, zDir)
+  if (xDir) {
+    const x = makeDirection(wasm, xDir)
+    return new wasm.gp_Ax2(pnt, z, x)
+  }
+  return new wasm.gp_Ax2(pnt, z)
+}
+
+function makeAx3(wasm, origin, axis, refDir) {
+  const pnt = makePoint(wasm, origin)
+  const z = makeDirection(wasm, axis)
+  if (refDir) {
+    const x = makeDirection(wasm, refDir)
+    return new wasm.gp_Ax3(pnt, z, x)
+  }
+  return new wasm.gp_Ax3(pnt, z)
+}
+
+// ============================================================================
+// Array Helpers
+// ============================================================================
+
+function polesToArray1OfPnt(wasm, poles) {
+  const arr = new wasm.TColgp_Array1OfPnt(1, poles.length)
+  for (let i = 0; i < poles.length; i++) {
+    const p = poles[i]
+    arr.setValue(i + 1, new wasm.gp_Pnt(clampCoord(p.x), clampCoord(p.y), clampCoord(p.z)))
+  }
+  return arr
+}
+
+function polesToArray1OfPnt2d(wasm, poles) {
+  const arr = new wasm.TColgp_Array1OfPnt2d(1, poles.length)
+  for (let i = 0; i < poles.length; i++) {
+    const p = poles[i]
+    const u = p.x !== undefined ? p.x : (p.u !== undefined ? p.u : 0)
+    const v = p.y !== undefined ? p.y : (p.v !== undefined ? p.v : 0)
+    arr.setValue(i + 1, new wasm.gp_Pnt2d(clampCoord(u), clampCoord(v)))
+  }
+  return arr
+}
+
+function polesToArray2OfPnt(wasm, poles) {
+  const uSize = poles.length
+  const vSize = poles[0].length
+  const arr = new wasm.TColgp_Array2OfPnt(1, uSize, 1, vSize)
+  for (let u = 0; u < uSize; u++) {
+    for (let v = 0; v < vSize; v++) {
+      const p = poles[u][v]
+      arr.setValue(u + 1, v + 1, new wasm.gp_Pnt(clampCoord(p.x), clampCoord(p.y), clampCoord(p.z)))
+    }
+  }
+  return arr
+}
+
+function knotsToArray1OfReal(wasm, knots) {
+  const arr = new wasm.TColStd_Array1OfReal(1, knots.length)
+  for (let i = 0; i < knots.length; i++) {
+    arr.setValue(i + 1, knots[i])
+  }
+  return arr
+}
+
+function multsToArray1OfInteger(wasm, mults) {
+  const arr = new wasm.TColStd_Array1OfInteger(1, mults.length)
+  for (let i = 0; i < mults.length; i++) {
+    arr.setValue(i + 1, mults[i])
+  }
+  return arr
+}
+
+function weightsToArray1OfReal(wasm, weights) {
+  const arr = new wasm.TColStd_Array1OfReal(1, weights.length)
+  for (let i = 0; i < weights.length; i++) {
+    arr.setValue(i + 1, weights[i])
+  }
+  return arr
+}
+
+function weightsToArray2OfReal(wasm, weights) {
+  const uSize = weights.length
+  const vSize = weights[0].length
+  const arr = new wasm.TColStd_Array2OfReal(1, uSize, 1, vSize)
+  for (let u = 0; u < uSize; u++) {
+    for (let v = 0; v < vSize; v++) {
+      arr.setValue(u + 1, v + 1, weights[u][v])
+    }
+  }
+  return arr
+}
+
+// ============================================================================
+// Basic Curve Builders
+// ============================================================================
+
+function createLine(wasm, start, end) {
+  if (!start || !end) return null
+  try {
+    const dx = end.x - start.x, dy = end.y - start.y, dz = end.z - start.z
+    if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-10) return null
+    const p1 = makePoint(wasm, start)
+    const p2 = makePoint(wasm, end)
+    const builder = new wasm.BRepBuilderAPI_MakeEdge(p1, p2)
+    if (builder.isDone()) return builder.edge()
+  } catch (e) {
+    console.warn('createLine failed:', e.message)
+  }
+  return null
+}
+
+// ============================================================================
+// B-Spline Curve Builder
+// ============================================================================
+
+function createBSplineCurve(wasm, nubs, sense = 'forward') {
+  if (!nubs || !nubs.poles || nubs.poles.length === 0) return null
+  if (!nubs.uKnots || nubs.uKnots.length === 0 || !nubs.uMults || nubs.uMults.length === 0) return null
+  if (!nubs.uDegree || nubs.uDegree < 1) return null
+  if (nubs.poles.length === 2) return createLine(wasm, nubs.poles[0], nubs.poles[1])
+
+  try {
+    const poles = polesToArray1OfPnt(wasm, nubs.poles)
+    const knots = knotsToArray1OfReal(wasm, nubs.uKnots)
+    const mults = multsToArray1OfInteger(wasm, nubs.uMults)
+    const degree = nubs.uDegree
+
+    // ACIS may mark curves as periodic that have clamped end knots (mult=degree+1).
+    // OCC rejects periodic curves with non-periodic knot structure. Detect and fix.
+    let periodic = nubs.uPeriodic || false
+    if (periodic && nubs.uMults.length >= 2) {
+      const firstMult = nubs.uMults[0]
+      const lastMult = nubs.uMults[nubs.uMults.length - 1]
+      if (firstMult === degree + 1 || lastMult === degree + 1) {
+        periodic = false  // clamped end knots → non-periodic
+      }
+    }
+
+    let curve
+    if (nubs.rational && nubs.weights && nubs.weights.length > 0) {
+      const weights = weightsToArray1OfReal(wasm, nubs.weights)
+      curve = new wasm.Geom_BSplineCurve(poles, weights, knots, mults, degree, periodic)
+    } else {
+      curve = new wasm.Geom_BSplineCurve(poles, knots, mults, degree, periodic)
+    }
+
+    if (sense === 'reversed') curve.reverse()
+    return curve
+  } catch (e) {
+    if (nubs.poles.length >= 2) {
+      return createLine(wasm, nubs.poles[0], nubs.poles[nubs.poles.length - 1])
+    }
+  }
+  return null
+}
+
+function createBSplineCurve2d(wasm, nubs) {
+  if (!nubs || !nubs.poles || nubs.poles.length === 0) return null
+  try {
+    const poles = polesToArray1OfPnt2d(wasm, nubs.poles)
+    const knots = knotsToArray1OfReal(wasm, nubs.uKnots)
+    const mults = multsToArray1OfInteger(wasm, nubs.uMults)
+    const degree = nubs.uDegree
+    const periodic = nubs.uPeriodic || false
+
+    if (nubs.rational && nubs.weights && nubs.weights.length > 0) {
+      const weights = weightsToArray1OfReal(wasm, nubs.weights)
+      return new wasm.Geom2d_BSplineCurve(poles, weights, knots, mults, degree, periodic)
+    }
+    return new wasm.Geom2d_BSplineCurve(poles, knots, mults, degree, periodic)
+  } catch (e) {
+    console.warn('createBSplineCurve2d failed:', e.message)
+  }
+  return null
+}
+
+// ============================================================================
+// B-Spline Surface Builder
+// ============================================================================
+
+function createBSplineSurface(wasm, nubs) {
+  if (!nubs || !nubs.poles || nubs.poles.length === 0) return null
+  if (!Array.isArray(nubs.poles[0])) return null
+
+  try {
+    const poles = polesToArray2OfPnt(wasm, nubs.poles)
+    const uKnots = knotsToArray1OfReal(wasm, nubs.uKnots)
+    const vKnots = knotsToArray1OfReal(wasm, nubs.vKnots)
+    const uMults = multsToArray1OfInteger(wasm, nubs.uMults)
+    const vMults = multsToArray1OfInteger(wasm, nubs.vMults)
+    const uDeg = nubs.uDegree, vDeg = nubs.vDegree
+    const uPer = nubs.uPeriodic || false, vPer = nubs.vPeriodic || false
+
+    if (nubs.rational && nubs.weights && nubs.weights.length > 0) {
+      const weights = weightsToArray2OfReal(wasm, nubs.weights)
+      return new wasm.Geom_BSplineSurface(poles, weights, uKnots, vKnots, uMults, vMults, uDeg, vDeg, uPer, vPer)
+    }
+    return new wasm.Geom_BSplineSurface(poles, uKnots, vKnots, uMults, vMults, uDeg, vDeg, uPer, vPer)
+  } catch (e) {
+    console.warn('createBSplineSurface failed:', e.message)
+    try {
+      const poles = polesToArray2OfPnt(wasm, nubs.poles)
+      const uKnots = knotsToArray1OfReal(wasm, nubs.uKnots)
+      const vKnots = knotsToArray1OfReal(wasm, nubs.vKnots)
+      const uMults = multsToArray1OfInteger(wasm, nubs.uMults)
+      const vMults = multsToArray1OfInteger(wasm, nubs.vMults)
+      return new wasm.Geom_BSplineSurface(poles, uKnots, vKnots, uMults, vMults, nubs.uDegree, nubs.vDegree, false, false)
+    } catch (e2) {}
+  }
+  return null
+}
+
+// ============================================================================
+// PCurve Builder
+// ============================================================================
+
+function createBSplinePCurve(wasm, pcurve, surface, sense = 'forward') {
+  if (!pcurve || !surface) return null
+  try {
+    const curve2d = createBSplineCurve2d(wasm, pcurve)
+    if (!curve2d) return null
+    const handleCurve2d = new wasm.Handle_Geom2d_Curve(curve2d)
+    const handleSurface = new wasm.Handle_Geom_Surface(surface)
+    const edge = wasm.BRepBuilderAPI_MakeEdge.fromPCurve(handleCurve2d, handleSurface)
+    if (!edge.isNull()) {
+      if (sense === 'reversed') edge.reverse()
+      return edge
+    }
+  } catch (e) {
+    console.warn('createBSplinePCurve failed:', e.message)
+  }
+  return null
+}
+
+// ============================================================================
+// Helix Builder
+// ============================================================================
+
+function createHelixCurve(wasm, helix) {
+  if (!helix) return null
+  try {
+    const points = helix.buildPoints ? helix.buildPoints() : []
+    if (points.length < 2) return null
+
+    const hArr = new wasm.TColgp_HArray1OfPnt(1, points.length)
+    for (let i = 0; i < points.length; i++) {
+      hArr.setValue(i + 1, new wasm.gp_Pnt(points[i].x, points[i].y, points[i].z))
+    }
+
+    const interp = new wasm.GeomAPI_Interpolate(
+      new wasm.Handle_TColgp_HArray1OfPnt(hArr), false, 1e-6
+    )
+    interp.perform()
+
+    if (interp.isDone()) {
+      const curve = interp.curve()
+      const handleCurve = new wasm.Handle_Geom_Curve(curve.get())
+      const builder = new wasm.BRepBuilderAPI_MakeEdge(handleCurve)
+      if (builder.isDone()) return builder.edge()
+    }
+  } catch (e) {
+    console.warn('createHelixCurve failed:', e.message)
+  }
+  return null
+}
+
+// ============================================================================
+// Surface Builders
+// ============================================================================
+
+function createPlaneSurface(wasm, origin, normal) {
+  if (!origin || !normal) return null
+  try {
+    const pnt = makePoint(wasm, origin)
+    const dir = makeDirection(wasm, normal)
+    const gpPln = new wasm.gp_Pln(pnt, dir)
+    return new wasm.Geom_Plane(gpPln)
+  } catch (e) {
+    console.warn('createPlaneSurface failed:', e.message)
+  }
+  return null
+}
+
+function createCylindricalSurface(wasm, center, axis, radius) {
+  if (!center || !axis || radius <= 0) return null
+  try {
+    return new wasm.Geom_CylindricalSurface(makeAx3(wasm, center, axis), radius)
+  } catch (e) {
+    console.warn('createCylindricalSurface failed:', e.message)
+  }
+  return null
+}
+
+function createConicalSurface(wasm, center, axis, radius, semiAngle) {
+  if (!center || !axis || radius <= 0) return null
+  try {
+    const ax3 = makeAx3(wasm, center, axis)
+    if (Math.abs(semiAngle) < 1e-6) return new wasm.Geom_CylindricalSurface(ax3, radius)
+    return new wasm.Geom_ConicalSurface(ax3, semiAngle, radius)
+  } catch (e) {
+    console.warn('createConicalSurface failed:', e.message)
+  }
+  return null
+}
+
+function createSphericalSurface(wasm, center, radius) {
+  if (!center || radius <= 0) return null
+  try {
+    return new wasm.Geom_SphericalSurface(makeAx3(wasm, center, { x: 0, y: 0, z: 1 }), radius)
+  } catch (e) {
+    console.warn('createSphericalSurface failed:', e.message)
+  }
+  return null
+}
+
+function createToroidalSurface(wasm, center, axis, majorRadius, minorRadius) {
+  if (!center || !axis || majorRadius <= 0 || minorRadius <= 0) return null
+  try {
+    return new wasm.Geom_ToroidalSurface(makeAx3(wasm, center, axis), majorRadius, minorRadius)
+  } catch (e) {
+    console.warn('createToroidalSurface failed:', e.message)
+  }
+  return null
+}
+
+function createSurfaceOfRevolution(wasm, profile, location, direction) {
+  if (!profile || !location || !direction) return null
+  try {
+    const axis = makeAx1(wasm, location, direction)
+    const handleCurve = new wasm.Handle_Geom_Curve(profile)
+    return new wasm.Geom_SurfaceOfRevolution(handleCurve, axis)
+  } catch (e) {
+    console.warn('createSurfaceOfRevolution failed:', e.message)
+  }
+  return null
+}
+
+function createRuledSurface(wasm, curve1, curve2) {
+  if (!curve1 || !curve2) return null
+  try {
+    const hc1 = new wasm.Handle_Geom_Curve(curve1)
+    const hc2 = new wasm.Handle_Geom_Curve(curve2)
+    const b1 = new wasm.BRepBuilderAPI_MakeEdge(hc1)
+    const b2 = new wasm.BRepBuilderAPI_MakeEdge(hc2)
+    if (!b1.isDone() || !b2.isDone()) return null
+    const w1 = new wasm.BRepBuilderAPI_MakeWire(b1.edge())
+    const w2 = new wasm.BRepBuilderAPI_MakeWire(b2.edge())
+    const loft = new wasm.BRepOffsetAPI_ThruSections(false, true)
+    loft.addWire(w1.wire())
+    loft.addWire(w2.wire())
+    loft.build()
+    if (loft.isDone()) return loft.shape()
+  } catch (e) {
+    console.warn('createRuledSurface failed:', e.message)
+  }
+  return null
+}
+
+function createOffsetSurface(wasm, baseSurface, offset) {
+  if (!baseSurface) return null
+  try {
+    const h = new wasm.Handle_Geom_Surface(baseSurface)
+    return new wasm.Geom_OffsetSurface(h, offset, true)
+  } catch (e) {
+    console.warn('createOffsetSurface failed:', e.message)
+  }
+  return null
+}
+
+// ============================================================================
+// Face/Edge Builders
+// ============================================================================
+
+function createFaceFromSurface(wasm, surface, tolerance = 1e-6) {
+  if (!surface) return null
+  try {
+    const h = new wasm.Handle_Geom_Surface(surface)
+    const builder = new wasm.BRepBuilderAPI_MakeFace(h, tolerance)
+    if (builder.isDone()) return builder.face()
+  } catch (e) {
+    console.warn('createFaceFromSurface failed:', e.message)
+  }
+  return null
+}
+
+function createEdgeFromCurve(wasm, curve, u1, u2) {
+  if (!curve) return null
+  try {
+    const h = new wasm.Handle_Geom_Curve(curve)
+    let builder
+    if (u1 !== undefined && u2 !== undefined) {
+      builder = new wasm.BRepBuilderAPI_MakeEdge(h, u1, u2)
+    } else {
+      builder = new wasm.BRepBuilderAPI_MakeEdge(h)
+    }
+    if (builder.isDone()) return builder.edge()
+  } catch (e) {
+    console.warn('createEdgeFromCurve failed:', e.message)
+  }
+  return null
+}
+
+// ============================================================================
+// ACIS Entity Converters
+// ============================================================================
+
+function convertACISSurface(wasm, surfaceEntity) {
+  if (!surfaceEntity) return null
+  try {
+    const typeName = surfaceEntity.getType ? surfaceEntity.getType() : ''
+
+    if (typeName.includes('plane')) {
+      return createPlaneSurface(wasm, surfaceEntity.origin, surfaceEntity.normal)
+    } else if (typeName.includes('cone')) {
+      const sine = surfaceEntity.sine || 0
+      const cosine = surfaceEntity.cosine || 1
+      const semiAngle = Math.abs(Math.asin(Math.max(-1, Math.min(1, sine))))
+      const major = surfaceEntity.major || { x: 1, y: 0, z: 0 }
+      const radius = Math.sqrt(major.x * major.x + major.y * major.y + major.z * major.z) || 1.0
+
+      // Match Python Acis2Step: negate axis when cosine * sine < 0
+      let axisDir = surfaceEntity.axis
+      if (cosine * sine < 0) {
+        axisDir = { x: -axisDir.x, y: -axisDir.y, z: -axisDir.z }
+      }
+      const ax3 = makeAx3(wasm, surfaceEntity.center, axisDir, major)
+      if (Math.abs(sine) < 1e-6) return new wasm.Geom_CylindricalSurface(ax3, radius)
+      return new wasm.Geom_ConicalSurface(ax3, semiAngle, radius)
+    } else if (typeName.includes('sphere')) {
+      // Use pole direction from ACIS entity as sphere axis (matching Python Acis2Step)
+      const pole = surfaceEntity.pole || { x: 0, y: 0, z: 1 }
+      const radius = surfaceEntity.radius || 1.0
+      try {
+        return new wasm.Geom_SphericalSurface(makeAx3(wasm, surfaceEntity.center, pole), radius)
+      } catch (e) {
+        return createSphericalSurface(wasm, surfaceEntity.center, radius)
+      }
+    } else if (typeName.includes('torus')) {
+      const majorRadius = Math.abs(surfaceEntity.major) || 2.0
+      const minorRadius = Math.abs(surfaceEntity.minor) || 0.5
+      return createToroidalSurface(wasm, surfaceEntity.center, surfaceEntity.axis, majorRadius, minorRadius)
+    } else if (typeName.includes('spline')) {
+      // Production ACIS bundle uses .spline, not .nubs
+      const splineData = surfaceEntity.spline || surfaceEntity.nubs
+      if (splineData) return createBSplineSurface(wasm, splineData)
+      // Spline surface may reference another surface type
+      if (surfaceEntity.surface) {
+        return convertACISSurface(wasm, surfaceEntity.surface)
+      }
+    }
+    console.warn('Unsupported surface type: ' + typeName)
+  } catch (e) {
+    console.warn('Failed to convert surface:', e.message)
+  }
+  return null
+}
+
+function convertACISCurve(wasm, curveEntity, startPt, endPt) {
+  if (!curveEntity) return null
+  try {
+    const typeName = curveEntity.getType ? curveEntity.getType() : ''
+
+    if (typeName.includes('straight')) {
+      const origin = makePoint(wasm, curveEntity.origin)
+      const direction = makeDirection(wasm, curveEntity.direction)
+      const ax1 = new wasm.gp_Ax1(origin, direction)
+      // Use Geom_Line(gp_Ax1) directly - chili-wasm doesn't need gp_Lin intermediate
+      return new wasm.Geom_Line(ax1)
+    } else if (typeName.includes('ellipse')) {
+      const center = makePoint(wasm, curveEntity.center)
+      const normal = makeDirection(wasm, curveEntity.axis)
+      const majorVec = curveEntity.major || { x: 1, y: 0, z: 0 }
+      const majorAxis = makeDirection(wasm, majorVec)
+      const majorRadius = Math.sqrt(majorVec.x ** 2 + majorVec.y ** 2 + majorVec.z ** 2) || 1.0
+      const ratio = curveEntity.ratio || 1.0
+      const minorRadius = majorRadius * ratio
+
+      const ax2 = new wasm.gp_Ax2(center, normal, majorAxis)
+
+      if (Math.abs(ratio - 1.0) < 1e-6) {
+        const gpCirc = new wasm.gp_Circ(ax2, majorRadius)
+        return new wasm.Geom_Circle(gpCirc)
+      } else {
+        const gpElips = new wasm.gp_Elips(ax2, majorRadius, minorRadius)
+        return new wasm.Geom_Ellipse(gpElips)
+      }
+    } else if (typeName.includes('intcurve') || typeName.includes('spline')) {
+      const splineData = curveEntity.spline || curveEntity.nubs
+      if (splineData) return createBSplineCurve(wasm, splineData, 'forward')
+    }
+
+    // Fallback: line between endpoints
+    if (startPt && endPt) {
+      const p1 = makePoint(wasm, startPt)
+      const dir = makeDirection(wasm, {
+        x: endPt.x - startPt.x, y: endPt.y - startPt.y, z: endPt.z - startPt.z
+      })
+      const ax1 = new wasm.gp_Ax1(p1, dir)
+      return new wasm.Geom_Line(ax1)
+    }
+    console.warn('Unsupported curve type: ' + typeName)
+  } catch (e) {
+    console.warn('Failed to convert curve:', e.message)
+  }
+  return null
+}
+
+function convertACISEdge(wasm, edgeEntity) {
+  if (!edgeEntity) return null
+  try {
+    const curveEntity = edgeEntity.getCurve ? edgeEntity.getCurve() : null
+    const startPt = edgeEntity.getStart ? edgeEntity.getStart() : null
+    const endPt = edgeEntity.getEnd ? edgeEntity.getEnd() : null
+    const startVertex = startPt && startPt.point ? startPt.point : startPt
+    const endVertex = endPt && endPt.point ? endPt.point : endPt
+
+    if (startVertex && endVertex) {
+      const p1 = makePoint(wasm, startVertex)
+      const p2 = makePoint(wasm, endVertex)
+      const dx = (endVertex.x || 0) - (startVertex.x || 0)
+      const dy = (endVertex.y || 0) - (startVertex.y || 0)
+      const dz = (endVertex.z || 0) - (startVertex.z || 0)
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-6) return null
+
+      const typeName = curveEntity && curveEntity.getType ? curveEntity.getType() : ''
+      if (typeName && !typeName.includes('straight')) {
+        const curve = convertACISCurve(wasm, curveEntity, startVertex, endVertex)
+        if (curve) {
+          const h = new wasm.Handle_Geom_Curve(curve)
+          // Use parameter-based trimming (ACIS edge has parameter1/parameter2)
+          // chili-wasm binding: BRepBuilderAPI_MakeEdge(Handle_Geom_Curve, double, double)
+          const param1 = edgeEntity.parameter1
+          const param2 = edgeEntity.parameter2
+          if (param1 !== undefined && param2 !== undefined && Math.abs(param2 - param1) > 1e-12) {
+            try {
+              const builder = new wasm.BRepBuilderAPI_MakeEdge(h, param1, param2)
+              if (builder.isDone()) {
+                const edge = builder.edge()
+                if (edgeEntity.sense === 'reversed') edge.reverse()
+                return edge
+              }
+            } catch (e) { /* parameter-based trim failed */ }
+          }
+          // Fallback: full curve edge
+          try {
+            const builder = new wasm.BRepBuilderAPI_MakeEdge(h)
+            if (builder.isDone()) {
+              const edge = builder.edge()
+              if (edgeEntity.sense === 'reversed') edge.reverse()
+              return edge
+            }
+          } catch (e) { /* full curve edge also failed */ }
+        }
+      }
+
+      // Straight line or fallback
+      try {
+        const builder = new wasm.BRepBuilderAPI_MakeEdge(p1, p2)
+        if (builder.isDone()) {
+          const edge = builder.edge()
+          if (edgeEntity.sense === 'reversed') edge.reverse()
+          return edge
+        }
+      } catch (e) {}
+    }
+
+    // No valid endpoints - try curve only
+    const curve = convertACISCurve(wasm, curveEntity, startVertex, endVertex)
+    if (curve) {
+      try {
+        const h = new wasm.Handle_Geom_Curve(curve)
+        const builder = new wasm.BRepBuilderAPI_MakeEdge(h)
+        if (builder.isDone()) {
+          const edge = builder.edge()
+          if (edgeEntity.sense === 'reversed') edge.reverse()
+          return edge
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.warn('Failed to convert edge:', e.message)
+  }
+  return null
+}
+
+function convertACISLoop(wasm, loopEntity) {
+  if (!loopEntity) return null
+  try {
+    const coedges = loopEntity.getCoedges ? loopEntity.getCoedges() : []
+    if (coedges.length === 0) return null
+
+    const wireBuilder = new wasm.BRepBuilderAPI_MakeWire()
+    let edgesAdded = 0
+
+    for (const coedge of coedges) {
+      const edgeEntity = coedge.getEdge ? coedge.getEdge() : null
+      const edge = convertACISEdge(wasm, edgeEntity)
+      if (edge) {
+        if (coedge.sense === 'reversed') edge.reverse()
+        try {
+          wireBuilder.add(edge)
+          edgesAdded++
+        } catch (e) { /* edge might not connect */ }
+      }
+    }
+
+    if (edgesAdded === 0) return null
+    if (wireBuilder.isDone()) return wireBuilder.wire()
+    try {
+      const wire = wireBuilder.wire()
+      if (wire && !wire.isNull()) return wire
+    } catch (e) {}
+  } catch (e) {
+    console.warn('Failed to convert loop:', e.message)
+  }
+  return null
+}
+
+function buildStraightLineWire(wasm, loopEntity) {
+  if (!loopEntity) return null
+  try {
+    const coedges = loopEntity.getCoedges ? loopEntity.getCoedges() : []
+    if (coedges.length === 0) return null
+
+    const wireBuilder = new wasm.BRepBuilderAPI_MakeWire()
+    let edgesAdded = 0
+
+    for (const coedge of coedges) {
+      const edgeEntity = coedge.getEdge ? coedge.getEdge() : null
+      if (!edgeEntity) continue
+      const startPt = edgeEntity.getStart ? edgeEntity.getStart() : null
+      const endPt = edgeEntity.getEnd ? edgeEntity.getEnd() : null
+      const sv = startPt && startPt.point ? startPt.point : startPt
+      const ev = endPt && endPt.point ? endPt.point : endPt
+      if (!sv || !ev) continue
+      const dx = (ev.x || 0) - (sv.x || 0)
+      const dy = (ev.y || 0) - (sv.y || 0)
+      const dz = (ev.z || 0) - (sv.z || 0)
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-6) continue
+      try {
+        const p1 = new wasm.gp_Pnt(sv.x || 0, sv.y || 0, sv.z || 0)
+        const p2 = new wasm.gp_Pnt(ev.x || 0, ev.y || 0, ev.z || 0)
+        const builder = new wasm.BRepBuilderAPI_MakeEdge(p1, p2)
+        if (builder.isDone()) {
+          const edge = builder.edge()
+          if (coedge.sense === 'reversed') edge.reverse()
+          wireBuilder.add(edge)
+          edgesAdded++
+        }
+      } catch (e) { /* skip edge */ }
+    }
+
+    if (edgesAdded === 0) return null
+    if (wireBuilder.isDone()) return wireBuilder.wire()
+    try {
+      const wire = wireBuilder.wire()
+      if (wire && !wire.isNull()) return wire
+    } catch (e) {}
+  } catch (e) {}
+  return null
+}
+
+/**
+ * Collect all edge endpoint coordinates from a face's loops
+ */
+function collectFaceEndpoints(faceEntity) {
+  const points = []
+  const loops = faceEntity.getLoops ? faceEntity.getLoops() : []
+  for (const loop of loops) {
+    const coedges = loop.getCoedges ? loop.getCoedges() : []
+    for (const coedge of coedges) {
+      const edge = coedge.getEdge ? coedge.getEdge() : null
+      if (!edge) continue
+      const sp = edge.getStart ? edge.getStart() : null
+      const ep = edge.getEnd ? edge.getEnd() : null
+      const sv = sp && sp.point ? sp.point : sp
+      const ev = ep && ep.point ? ep.point : ep
+      if (sv && isFinite(sv.x) && isFinite(sv.y) && isFinite(sv.z)) points.push(sv)
+      if (ev && isFinite(ev.x) && isFinite(ev.y) && isFinite(ev.z)) points.push(ev)
+    }
+  }
+  return points
+}
+
+/**
+ * Compute UV bounds for a cylinder/cone surface from edge endpoints.
+ * Projects 3D points into the surface's parametric (u,v) space.
+ *
+ * OCC cylinder S(u,v) = Center + R*cos(u)*XDir + R*sin(u)*YDir + v*Axis
+ * OCC cone    S(u,v) = Center + (R + v*sin(α))*(cos(u)*XDir + sin(u)*YDir) + v*cos(α)*Axis
+ */
+function computeCylinderConeUVBounds(surfaceEntity, points) {
+  if (points.length < 2) return null
+
+  const center = surfaceEntity.center
+  const axisRaw = surfaceEntity.axis
+  if (!center || !axisRaw) return null
+
+  // Normalize axis
+  const aLen = Math.sqrt(axisRaw.x ** 2 + axisRaw.y ** 2 + axisRaw.z ** 2)
+  if (aLen < 1e-10) return null
+  const axis = { x: axisRaw.x / aLen, y: axisRaw.y / aLen, z: axisRaw.z / aLen }
+
+  // Compute XDir from the major vector (reference direction of gp_Ax3)
+  const majorRaw = surfaceEntity.major || { x: 1, y: 0, z: 0 }
+  let xDir
+  if (typeof majorRaw === 'object' && majorRaw.x !== undefined) {
+    const mLen = Math.sqrt(majorRaw.x ** 2 + majorRaw.y ** 2 + majorRaw.z ** 2)
+    if (mLen < 1e-10) return null
+    // Project major onto plane perpendicular to axis (gp_Ax3 does this internally)
+    const dot = (majorRaw.x * axis.x + majorRaw.y * axis.y + majorRaw.z * axis.z) / mLen
+    let xRaw = { x: majorRaw.x / mLen - dot * axis.x, y: majorRaw.y / mLen - dot * axis.y, z: majorRaw.z / mLen - dot * axis.z }
+    const xLen = Math.sqrt(xRaw.x ** 2 + xRaw.y ** 2 + xRaw.z ** 2)
+    if (xLen < 1e-10) return null
+    xDir = { x: xRaw.x / xLen, y: xRaw.y / xLen, z: xRaw.z / xLen }
+  } else {
+    return null
+  }
+
+  // YDir = Axis × XDir
+  const yDir = {
+    x: axis.y * xDir.z - axis.z * xDir.y,
+    y: axis.z * xDir.x - axis.x * xDir.z,
+    z: axis.x * xDir.y - axis.y * xDir.x
+  }
+
+  const sine = surfaceEntity.sine || 0
+  const cosine = surfaceEntity.cosine || 1
+  const semiAngle = Math.atan2(Math.abs(sine), Math.abs(cosine))
+  const isCylinder = Math.abs(sine) < 1e-6
+
+  // Project each point
+  const angles = []
+  const vParams = []
+
+  for (const p of points) {
+    const dx = p.x - center.x
+    const dy = p.y - center.y
+    const dz = p.z - center.z
+
+    // Height along axis
+    const vAxis = dx * axis.x + dy * axis.y + dz * axis.z
+
+    // v parameter: for cylinder v = vAxis, for cone v = vAxis / cos(α)
+    const v = isCylinder ? vAxis : (Math.abs(Math.cos(semiAngle)) > 1e-10 ? vAxis / Math.cos(semiAngle) : vAxis)
+    vParams.push(v)
+
+    // Projection onto base plane
+    const px = dx * xDir.x + dy * xDir.y + dz * xDir.z
+    const py = dx * yDir.x + dy * yDir.y + dz * yDir.z
+    const u = Math.atan2(py, px)
+    angles.push(u)
+  }
+
+  if (angles.length === 0) return null
+
+  // Compute V bounds (simple min/max)
+  const vMin = Math.min(...vParams)
+  const vMax = Math.max(...vParams)
+  if (vMax - vMin < 1e-10) return null
+
+  // Compute U bounds — handle angular wrap-around
+  // Sort angles, find the largest gap, set range to exclude that gap
+  const sorted = [...angles].sort((a, b) => a - b)
+  let maxGap = 0
+  let gapStart = 0
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const gap = sorted[i + 1] - sorted[i]
+    if (gap > maxGap) { maxGap = gap; gapStart = i }
+  }
+  // Also check wrap-around gap
+  const wrapGap = (2 * Math.PI) - (sorted[sorted.length - 1] - sorted[0])
+  let uMin, uMax
+  if (wrapGap > maxGap) {
+    // Largest gap is the wrap-around → range is [sorted[0], sorted[last]]
+    uMin = sorted[0]
+    uMax = sorted[sorted.length - 1]
+  } else {
+    // Largest gap is in the middle → range wraps around
+    uMin = sorted[gapStart + 1]
+    uMax = sorted[gapStart] + 2 * Math.PI
+  }
+
+  // Add small padding
+  const uPad = (uMax - uMin) * 0.01 || 0.01
+  const vPad = (vMax - vMin) * 0.01 || 0.01
+
+  return {
+    uMin: uMin - uPad,
+    uMax: uMax + uPad,
+    vMin: vMin - vPad,
+    vMax: vMax + vPad
+  }
+}
+
+function isFaceBboxValid(wasm, face) {
+  try {
+    const bb = new wasm.Bnd_Box()
+    wasm.BRepBndLib.add(face, bb)
+    if (bb.isVoid()) return false
+    const b = bb.get()
+    const MAX = 1e10
+    return Math.abs(b.xmin) < MAX && Math.abs(b.xmax) < MAX &&
+           Math.abs(b.ymin) < MAX && Math.abs(b.ymax) < MAX &&
+           Math.abs(b.zmin) < MAX && Math.abs(b.zmax) < MAX
+  } catch (e) { return false }
+}
+
+function convertACISFace(wasm, faceEntity) {
+  if (!faceEntity) return null
+  try {
+    const surfaceEntity = faceEntity.getSurface ? faceEntity.getSurface() : null
+    const surface = convertACISSurface(wasm, surfaceEntity)
+    if (!surface) return null
+
+    const handleSurface = new wasm.Handle_Geom_Surface(surface)
+    const loops = faceEntity.getLoops ? faceEntity.getLoops() : []
+
+    // Compute effective sense (matches Python Acis2Step behavior):
+    // - Cone: flip when cosine < 0
+    // - Torus: flip when minor radius < 0
+    const typeName = surfaceEntity && surfaceEntity.getType ? surfaceEntity.getType() : ''
+    let shouldReverse = (faceEntity.sense === 'reversed')
+    if (typeName.includes('cone') && surfaceEntity.cosine < 0) {
+      shouldReverse = !shouldReverse
+    } else if (typeName.includes('torus') && surfaceEntity.minor < 0) {
+      shouldReverse = !shouldReverse
+    }
+
+    function applyAndReturn(result) {
+      if (shouldReverse) result.reverse()
+      return result
+    }
+
+    // Approach 1: Wire-based face with full curve reconstruction
+    if (loops.length > 0) {
+      const outerWire = convertACISLoop(wasm, loops[0])
+      if (outerWire) {
+        try {
+          const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, 1e-6)
+          faceBuilder.add(outerWire)
+          for (let i = 1; i < loops.length; i++) {
+            const innerWire = convertACISLoop(wasm, loops[i])
+            if (innerWire) {
+              innerWire.reverse()
+              faceBuilder.add(innerWire)
+            }
+          }
+          if (faceBuilder.isDone()) {
+            const result = faceBuilder.face()
+            if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
+
+          }
+        } catch (e) { /* wire-based face failed */ }
+      }
+    }
+
+    // Approach 2: Straight-line-only wire (approximate edges but valid faces)
+    if (loops.length > 0) {
+      const straightWire = buildStraightLineWire(wasm, loops[0])
+      if (straightWire) {
+        try {
+          const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, 1e-6)
+          faceBuilder.add(straightWire)
+          for (let i = 1; i < loops.length; i++) {
+            const innerWire = buildStraightLineWire(wasm, loops[i])
+            if (innerWire) {
+              innerWire.reverse()
+              faceBuilder.add(innerWire)
+            }
+          }
+          if (faceBuilder.isDone()) {
+            const result = faceBuilder.face()
+            if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
+
+          }
+        } catch (e) { /* straight-line wire face failed */ }
+      }
+    }
+
+    // Approach 3: UV-bounds from edge endpoints (for cylinder/cone surfaces)
+    if (typeName.includes('cone')) {
+      try {
+        const pts = collectFaceEndpoints(faceEntity)
+        const bounds = computeCylinderConeUVBounds(surfaceEntity, pts)
+        if (bounds) {
+          const freshSurface = convertACISSurface(wasm, surfaceEntity)
+          const freshHandle = freshSurface ? new wasm.Handle_Geom_Surface(freshSurface) : handleSurface
+          const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(
+            freshHandle, bounds.uMin, bounds.uMax, bounds.vMin, bounds.vMax, 1e-6
+          )
+          if (faceBuilder.isDone()) {
+            const result = faceBuilder.face()
+            if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
+
+          }
+        }
+      } catch (e) { /* UV bounds approach failed */ }
+    }
+
+    // Approach 4: Untrimmed face from surface's natural bounds
+    // Works well for sphere, torus, and bounded spline surfaces
+    // Skip for planes — untrimmed planes are huge and hurt sewing
+    if (!typeName.includes('plane')) {
+      try {
+        const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, 1e-6)
+        if (faceBuilder.isDone()) {
+          const result = faceBuilder.face()
+          if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
+
+        }
+      } catch (e) {}
+    }
+
+    // Approach 5: Explicit UV bounds for spline surfaces
+    try {
+      let uMin, uMax, vMin, vMax
+      let hasBounds = false
+      const nubs = surfaceEntity && (surfaceEntity.spline || surfaceEntity.nubs)
+      if (nubs) {
+        if (nubs.uKnots && nubs.uKnots.length >= 2) {
+          uMin = nubs.uKnots[0]; uMax = nubs.uKnots[nubs.uKnots.length - 1]
+        }
+        if (nubs.vKnots && nubs.vKnots.length >= 2) {
+          vMin = nubs.vKnots[0]; vMax = nubs.vKnots[nubs.vKnots.length - 1]
+        }
+        hasBounds = uMin !== undefined && vMin !== undefined
+      }
+      if (surfaceEntity && surfaceEntity.range) {
+        const range = surfaceEntity.range
+        if (range.uRange) { uMin = range.uRange.lower; uMax = range.uRange.upper; hasBounds = true }
+        if (range.vRange) { vMin = range.vRange.lower; vMax = range.vRange.upper; hasBounds = true }
+      }
+      if (hasBounds && uMax > uMin && vMax > vMin) {
+        const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, uMin, uMax, vMin, vMax, 1e-6)
+        if (faceBuilder.isDone()) {
+          const result = faceBuilder.face()
+          return applyAndReturn(result)
+        }
+      }
+    } catch (e) {}
+
+  } catch (e) {}
+
+  return null
+}
+
+function convertACISShell(wasm, shellEntity) {
+  if (!shellEntity) return null
+  try {
+    const faces = shellEntity.getFaces ? shellEntity.getFaces() : []
+    if (faces.length === 0) return null
+
+    const builder = new wasm.BRep_Builder()
+    const shell = builder.makeShell()
+
+    let faceCount = 0
+    for (const faceEntity of faces) {
+      const face = convertACISFace(wasm, faceEntity)
+      if (face) {
+        try {
+          const bndBox = new wasm.Bnd_Box()
+          wasm.BRepBndLib.add(face, bndBox)
+          if (!bndBox.isVoid()) {
+            const bounds = bndBox.get()
+            const MAX_EXTENT = 1e10
+            if (Math.abs(bounds.xmin) < MAX_EXTENT && Math.abs(bounds.xmax) < MAX_EXTENT &&
+                Math.abs(bounds.ymin) < MAX_EXTENT && Math.abs(bounds.ymax) < MAX_EXTENT &&
+                Math.abs(bounds.zmin) < MAX_EXTENT && Math.abs(bounds.zmax) < MAX_EXTENT) {
+              builder.add(shell, face)
+              faceCount++
+            }
+          }
+        } catch (e) { /* face add failed */ }
+      }
+    }
+    if (faceCount > 0) return shell
+  } catch (e) {
+    console.warn('Failed to convert shell:', e.message)
+  }
+  return null
+}
+
+function tryMakeSolid(wasm, shell) {
+  // Sew faces into proper topology (connects shared edges, makes watertight)
+  try {
+    const sewing = new wasm.BRepBuilderAPI_Sewing(1e-6, true, true, true, false)
+    sewing.add(shell)
+    sewing.perform(new wasm.Message_ProgressRange())
+    const sewedShape = sewing.sewedShape()
+
+    // Collect solids from sewing result
+    const solids = []
+    const solidExplorer = new wasm.TopExp_Explorer(
+      sewedShape,
+      wasm.TopAbs_ShapeEnum.TopAbs_SOLID,
+      wasm.TopAbs_ShapeEnum.TopAbs_SHAPE
+    )
+    while (solidExplorer.more()) {
+      solids.push(wasm.TopoDS.solid(solidExplorer.current()))
+      solidExplorer.next()
+    }
+
+    if (solids.length === 1) return solids[0]
+    if (solids.length > 1) {
+      const builder = new wasm.BRep_Builder()
+      const compound = builder.makeCompound()
+      for (const s of solids) builder.add(compound, s)
+      return compound
+    }
+
+    // No solids from sewing — return sewed shape directly to preserve all faces
+    // (extracting only shells loses disconnected faces)
+    return sewedShape
+  } catch (e) {}
+
+  // Fallback: direct MakeSolid
+  try {
+    const solidBuilder = new wasm.BRepBuilderAPI_MakeSolid(shell)
+    if (solidBuilder.isDone()) return solidBuilder.solid()
+  } catch (e) {}
+
+  return shell
+}
+
+function convertACISBody(wasm, bodyEntity) {
+  if (!bodyEntity) return null
+  try {
+    const lumps = bodyEntity.getLumps ? bodyEntity.getLumps() : []
+    const solidsAndShells = []
+
+    for (const lump of lumps) {
+      const lumpShells = lump.getShells ? lump.getShells() : []
+      for (const shellEntity of lumpShells) {
+        const shell = convertACISShell(wasm, shellEntity)
+        if (shell) {
+          solidsAndShells.push(tryMakeSolid(wasm, shell))
+        }
+      }
+    }
+
+    if (solidsAndShells.length === 0) return null
+    if (solidsAndShells.length === 1) return solidsAndShells[0]
+
+    const builder = new wasm.BRep_Builder()
+    const compound = builder.makeCompound()
+    for (const shape of solidsAndShells) {
+      builder.add(compound, shape)
+    }
+    return compound
+  } catch (e) {
+    console.warn('Failed to convert body:', e.message)
+  }
+  return null
+}
+
+function hasValidBoundingBox(wasm, shape) {
+  try {
+    const bndBox = new wasm.Bnd_Box()
+    wasm.BRepBndLib.add(shape, bndBox)
+    if (bndBox.isVoid()) return false
+    const b = bndBox.get()
+    const MAX_EXTENT = 1e10
+    return Math.abs(b.xmin) < MAX_EXTENT && Math.abs(b.xmax) < MAX_EXTENT &&
+           Math.abs(b.ymin) < MAX_EXTENT && Math.abs(b.ymax) < MAX_EXTENT &&
+           Math.abs(b.zmin) < MAX_EXTENT && Math.abs(b.zmax) < MAX_EXTENT
+  } catch (e) {
+    return false
+  }
+}
+
+function convertACISBodiesToShape(wasm, bodies) {
+  if (!bodies || bodies.length === 0) return null
+
+  const shapes = []
+  let skippedBodies = 0
+
+  for (let i = 0; i < bodies.length; i++) {
+    const body = bodies[i]
+    const shape = convertACISBody(wasm, body)
+    if (shape) {
+      if (hasValidBoundingBox(wasm, shape)) {
+        shapes.push(shape)
+      } else {
+        skippedBodies++
+      }
+    } else {
+      skippedBodies++
+    }
+  }
+
+  if (shapes.length === 0) throw new Error('Failed to convert any ACIS bodies to geometry')
+  if (shapes.length === 1) return shapes[0]
+
+  const builder = new wasm.BRep_Builder()
+  const compound = builder.makeCompound()
+  for (const shape of shapes) {
+    builder.add(compound, shape)
+  }
+  return compound
+}
+
+// ============================================================================
+// chili-worker.js
+// ============================================================================
+
+/**
+ * Web Worker Message Handler (chili-wasm backend)
+ * Handles analyze and convert messages for STL/3MF/F3D to STEP/STL conversion
+ * Uses chili3d's OCCT 7.9.1 WASM build
+ */
+
 
 
 
@@ -1962,10 +2702,10 @@ function postProgress(message) {
 async function handleAnalyze(data) {
   const { fileData, fileName = 'input.stl' } = data
 
-  if (!ocInstance) {
-    ocInstance = await initOpenCascade(WORKER_BASE_PATH, self.postMessage.bind(self))
+  if (!wasmInstance) {
+    wasmInstance = await initChiliWasm(WORKER_BASE_PATH, self.postMessage.bind(self))
   }
-  const oc = ocInstance
+  const wasm = wasmInstance
 
   const is3MF = fileName.toLowerCase().endsWith('.3mf')
   const isF3D = fileName.toLowerCase().endsWith('.f3d')
@@ -1975,16 +2715,25 @@ async function handleAnalyze(data) {
   let shape = null
 
   if (isF3D) {
-    // Analyze F3D file
+    // F3D analysis - requires ACIS module
     postProgress('Parsing F3D file for analysis...')
+    if (!self.ACISParser) {
+      throw new Error('F3D support requires ACIS module (not loaded)')
+    }
 
     const bodies = await self.ACISParser.parseF3D(fileData, loadJSZip)
-    postProgress('Converting F3D geometry...')
+    postProgress(`Found ${bodies.length} ACIS bodies, converting...`)
+    shape = convertACISBodiesToShape(wasm, bodies)
 
-    shape = self.ACISGeometry.convertACISBodiesToShape(oc, bodies)
-
-    if (!shape) {
-      throw new Error('Failed to convert F3D geometry for analysis')
+    // Count faces from ACIS data
+    for (const body of bodies) {
+      const lumps = body.getLumps ? body.getLumps() : []
+      for (const lump of lumps) {
+        const shells = lump.getShells ? lump.getShells() : []
+        for (const shell of shells) {
+          totalTriangles += (shell.getFaces ? shell.getFaces() : []).length
+        }
+      }
     }
   } else if (is3MF) {
     postProgress('Parsing 3MF file for analysis...')
@@ -1993,16 +2742,11 @@ async function handleAnalyze(data) {
     // Combine all meshes for analysis
     let vertexOffset = 0
     for (const mesh of meshes) {
-      if (mesh.isStl) {
-        // For embedded STL, we'd need to parse it - for now skip JS analysis
-        continue
-      }
+      if (mesh.isStl) continue
       if (mesh.vertices && mesh.triangles) {
-        // Add vertices
         for (const v of mesh.vertices) {
           vertices.push(v)
         }
-        // Add triangles with offset indices
         for (const tri of mesh.triangles) {
           triangles.push({
             v1: tri.v1 + vertexOffset,
@@ -2015,7 +2759,7 @@ async function handleAnalyze(data) {
     }
     totalTriangles = triangles.length
 
-    // Convert first mesh to STL for OC analysis
+    // Convert first mesh to STL for chili-wasm analysis
     if (meshes.length > 0) {
       const firstMesh = meshes[0]
       let stlData
@@ -2024,14 +2768,12 @@ async function handleAnalyze(data) {
       } else {
         stlData = meshToStl(firstMesh)
       }
-      oc.FS.writeFile('/input.stl', stlData)
-      shape = readStl(oc, '/input.stl')
+      shape = readStl(wasm, stlData)
     }
   } else {
     postProgress('Analyzing STL file...')
     const stlArray = new Uint8Array(fileData)
-    oc.FS.writeFile('/input.stl', stlArray)
-    shape = readStl(oc, '/input.stl')
+    shape = readStl(wasm, stlArray)
 
     // Get triangle count from binary STL header
     if (fileData.byteLength > 84) {
@@ -2045,8 +2787,8 @@ async function handleAnalyze(data) {
     triangles = parsed.triangles
   }
 
-  // Get OpenCascade stats
-  const stats = shape ? analyzeMesh(oc, shape, totalTriangles) : {
+  // Get chili-wasm stats
+  const stats = shape ? analyzeMesh(wasm, shape, totalTriangles) : {
     triangleCount: totalTriangles,
     qualityIssues: []
   }
@@ -2081,17 +2823,14 @@ async function handleAnalyze(data) {
       }
     }
 
-    // Add mesh complexity info
     stats.jsAnalyzed = true
     stats.analyzedTriangles = triangles.length
     stats.analyzedVertices = vertices.length
   }
 
-  // Cleanup
-  try {
-    oc.FS.unlink('/input.stl')
-  } catch (e) {
-    // File may not exist
+  // Clean up shape
+  if (shape) {
+    try { shape.delete() } catch (e) {}
   }
 
   self.postMessage({ type: 'analysis', data: stats })
@@ -2111,10 +2850,10 @@ async function handleConvert(data) {
     skipMerge = false
   } = data
 
-  if (!ocInstance) {
-    ocInstance = await initOpenCascade(WORKER_BASE_PATH, self.postMessage.bind(self))
+  if (!wasmInstance) {
+    wasmInstance = await initChiliWasm(WORKER_BASE_PATH, self.postMessage.bind(self))
   }
-  const oc = ocInstance
+  const wasm = wasmInstance
 
   const is3MF = fileName.toLowerCase().endsWith('.3mf')
   const isF3D = fileName.toLowerCase().endsWith('.f3d')
@@ -2124,52 +2863,51 @@ async function handleConvert(data) {
   let allRepairs = []
 
   if (isF3D) {
-    // Parse F3D file (Fusion 360 ACIS format)
+    // F3D conversion - parse ACIS bodies and convert to OCC shapes
     postProgress('Parsing F3D file...')
-
-    // Use ACISParser from imported module
-    const bodies = await self.ACISParser.parseF3D(fileData, loadJSZip)
-
-    postProgress(`Found ${bodies.length} body/bodies in F3D`)
-
-    // Convert ACIS bodies to OpenCascade shapes
-    postProgress('Converting ACIS geometry to OpenCascade...')
-
-    const shape = self.ACISGeometry.convertACISBodiesToShape(oc, bodies)
-
-    if (!shape) {
-      throw new Error('Failed to convert F3D geometry')
+    if (!self.ACISParser) {
+      throw new Error('F3D support requires ACIS module (not loaded)')
     }
 
-    // Get before stats
-    beforeStats = analyzeMesh(oc, shape, 0)
-    beforeStats.note = 'F3D B-rep geometry (direct conversion)'
+    const bodies = await self.ACISParser.parseF3D(fileData, loadJSZip)
+    postProgress(`Found ${bodies.length} ACIS bodies, converting geometry...`)
+
+    // Count total ACIS faces
+    for (const body of bodies) {
+      const lumps = body.getLumps ? body.getLumps() : []
+      for (const lump of lumps) {
+        const shells = lump.getShells ? lump.getShells() : []
+        for (const shell of shells) {
+          totalTriangles += (shell.getFaces ? shell.getFaces() : []).length
+        }
+      }
+    }
+
+    const shape = convertACISBodiesToShape(wasm, bodies)
+    if (!shape) throw new Error('Failed to convert ACIS geometry')
+
+    // Analyze BEFORE processing
+    postProgress('Analyzing input geometry...')
+    beforeStats = analyzeMesh(wasm, shape, totalTriangles)
     self.postMessage({ type: 'beforeStats', data: beforeStats })
 
-    // For F3D files, skip heavy processing since ACIS geometry is already valid B-rep
-    // Only do light sewing to ensure watertight topology
-    postProgress('Sewing F3D geometry...')
-    try {
-      const sewing = new oc.BRepBuilderAPI_Sewing(tolerance * 5, true, true, true, false)
-      sewing.Add(shape)
-      sewing.Perform(new oc.Message_ProgressRange_1())
-      const sewedShape = sewing.SewedShape()
-      shapes.push(sewedShape)
-      allRepairs.push('Sewed F3D geometry')
-    } catch (sewErr) {
-      console.warn('F3D sewing failed, using original shape:', sewErr.message)
-      shapes.push(shape)
-      allRepairs.push('Using original F3D geometry (sewing skipped)')
-    }
-
+    // F3D shapes are already B-rep, minimal repair needed
+    const processResult = processShape(wasm, shape, {
+      tolerance,
+      repair,
+      mergeFacesOpt,
+      skipMerge: true, // F3D shapes are already clean B-rep
+      faceCount: beforeStats.faceCount || totalTriangles
+    }, self.postMessage.bind(self))
+    shapes.push(processResult.shape)
+    allRepairs.push(...processResult.repairs)
   } else if (is3MF) {
     // Parse 3MF file
     postProgress('Parsing 3MF file...')
     const meshes = await parse3MF(fileData)
-
     postProgress(`Found ${meshes.length} mesh(es) in 3MF`)
 
-    // Calculate total triangles for 3MF before stats
+    // Calculate total triangles
     for (const mesh of meshes) {
       if (mesh.triangles) {
         totalTriangles += mesh.triangles.length
@@ -2194,15 +2932,11 @@ async function handleConvert(data) {
         stlData = meshToStl(mesh)
       }
 
-      const inputPath = `/input_${i}.stl`
-      oc.FS.writeFile(inputPath, stlData)
+      const shape = readStl(wasm, stlData)
 
-      const shape = readStl(oc, inputPath)
-
-      // Get before stats from first mesh for 3MF
+      // Get before stats from first mesh
       if (i === 0 && !beforeStats) {
-        beforeStats = analyzeMesh(oc, shape, totalTriangles)
-        // For 3MF, estimate total faces from all meshes
+        beforeStats = analyzeMesh(wasm, shape, totalTriangles)
         if (meshes.length > 1) {
           beforeStats.triangleCount = totalTriangles
           beforeStats.note = `Combined from ${meshes.length} meshes`
@@ -2211,7 +2945,7 @@ async function handleConvert(data) {
       }
 
       const faceCount = mesh.triangles ? mesh.triangles.length : totalTriangles
-      const processResult = processShape(oc, shape, {
+      const processResult = processShape(wasm, shape, {
         tolerance,
         repair,
         mergeFacesOpt,
@@ -2220,31 +2954,26 @@ async function handleConvert(data) {
       }, self.postMessage.bind(self))
       shapes.push(processResult.shape)
       allRepairs.push(...processResult.repairs.map(r => meshes.length > 1 ? `Mesh ${i + 1}: ${r}` : r))
-
-      oc.FS.unlink(inputPath)
     }
   } else {
-    // STL file - get triangle count from binary header
-    postProgress('Writing STL to filesystem...')
+    // STL file
+    postProgress('Reading STL file...')
     const stlArray = new Uint8Array(fileData)
 
-    // Try to get triangle count from binary STL header
+    // Get triangle count from binary STL header
     if (fileData.byteLength > 84) {
       const view = new DataView(fileData)
       totalTriangles = view.getUint32(80, true)
     }
 
-    oc.FS.writeFile('/input.stl', stlArray)
-
-    postProgress('Reading STL file...')
-    const shape = readStl(oc, '/input.stl')
+    const shape = readStl(wasm, stlArray)
 
     // Analyze mesh BEFORE processing
     postProgress('Analyzing input mesh...')
-    beforeStats = analyzeMesh(oc, shape, totalTriangles)
+    beforeStats = analyzeMesh(wasm, shape, totalTriangles)
     self.postMessage({ type: 'beforeStats', data: beforeStats })
 
-    const processResult = processShape(oc, shape, {
+    const processResult = processShape(wasm, shape, {
       tolerance,
       repair,
       mergeFacesOpt,
@@ -2253,8 +2982,6 @@ async function handleConvert(data) {
     }, self.postMessage.bind(self))
     shapes.push(processResult.shape)
     allRepairs.push(...processResult.repairs)
-
-    oc.FS.unlink('/input.stl')
   }
 
   // Send repair log
@@ -2262,105 +2989,62 @@ async function handleConvert(data) {
     self.postMessage({ type: 'repairLog', data: allRepairs })
   }
 
-  // Combine multiple shapes into compound if needed
+  // Combine multiple shapes if needed
   let finalShape
   if (shapes.length === 1) {
     finalShape = shapes[0]
   } else {
     postProgress('Combining meshes...')
-    const builder = new oc.BRep_Builder()
-    const compound = new oc.TopoDS_Compound()
-    builder.MakeCompound(compound)
-
-    for (const shape of shapes) {
-      builder.Add(compound, shape)
+    const combined = wasm.ShapeFactory.combine(shapes)
+    if (combined.isOk) {
+      finalShape = wasm.Shape.clone(combined.shape)
+    } else {
+      // Fallback: just use first shape
+      console.warn('Shape combination failed:', combined.error)
+      finalShape = shapes[0]
     }
-
-    finalShape = compound
+    combined.delete()
   }
 
   // Analyze mesh AFTER processing
   postProgress('Analyzing output mesh...')
-  const afterStats = analyzeMesh(oc, finalShape, totalTriangles)
+  const afterStats = analyzeMesh(wasm, finalShape, totalTriangles)
   self.postMessage({ type: 'afterStats', data: afterStats })
+
+  // Tessellate for 3D preview
+  postProgress('Generating 3D preview...')
+  const meshData = tessellateShape(wasm, finalShape)
+  if (meshData) {
+    self.postMessage(
+      { type: 'outputMesh', data: meshData },
+      [meshData.positions.buffer, meshData.normals.buffer, meshData.indices.buffer]
+    )
+  }
 
   // Write output
   let actualFormat = outputFormat
-  let ext = outputFormat === 'stl' ? 'stl' : 'step'
-  let outputPath = `/output.${ext}`
-  let outputData
-
   postProgress(`Writing ${actualFormat.toUpperCase()} file...`)
 
-  // STL export requires the shape to be meshed/triangulated first
-  if (actualFormat === 'stl') {
-    postProgress('Meshing geometry for STL export...')
-    try {
-      const meshParams = new oc.BRepMesh_IncrementalMesh_2(
-        finalShape,
-        tolerance, // linear deflection
-        false, // relative
-        0.5, // angular deflection
-        false // parallel
-      )
-      meshParams.Perform(new oc.Message_ProgressRange_1())
-    } catch (meshErr) {
-      console.warn('Meshing step warning:', meshErr.message)
-    }
-  }
-
+  let outputData
   try {
-    writeOutput(oc, finalShape, actualFormat, outputPath)
-
-    // Read the output file
-    const stat = oc.FS.stat(outputPath)
-    console.log('Output file size:', stat.size, 'bytes')
-    outputData = oc.FS.readFile(outputPath)
-    console.log('Read', outputData.length, 'bytes from output file')
+    outputData = writeOutput(wasm, finalShape, actualFormat)
   } catch (writeError) {
     console.warn('Primary export failed:', writeError.message)
 
-    // If STEP export failed, fall back to STL
-    if (actualFormat === 'step' && writeError.message === 'STEP_EXPORT_FAILED') {
-      console.log('Falling back to STL export...')
-      postProgress('STEP export failed, falling back to STL...')
-
-      actualFormat = 'stl'
-      ext = 'stl'
-      outputPath = `/output.${ext}`
-
-      // For STL, we need to mesh the geometry first
-      postProgress('Meshing geometry for STL export...')
+    // If STEP export failed, try IGES as fallback
+    if (actualFormat === 'step') {
       try {
-        const meshParams = new oc.BRepMesh_IncrementalMesh_2(
-          finalShape,
-          0.1, // linear deflection
-          false, // relative
-          0.5, // angular deflection
-          false // parallel
-        )
-        meshParams.Perform(new oc.Message_ProgressRange_1())
-      } catch (meshErr) {
-        console.warn('Meshing failed:', meshErr.message)
+        postProgress('STEP export failed, trying IGES...')
+        actualFormat = 'iges'
+        outputData = writeOutput(wasm, finalShape, 'iges')
+        allRepairs.push('STEP export failed, exported as IGES instead')
+      } catch (igesError) {
+        console.warn('IGES fallback also failed:', igesError.message)
+        throw writeError
       }
-
-      writeOutput(oc, finalShape, actualFormat, outputPath)
-
-      const stat = oc.FS.stat(outputPath)
-      console.log('STL fallback output file size:', stat.size, 'bytes')
-      outputData = oc.FS.readFile(outputPath)
-
-      allRepairs.push('STEP export failed, exported as STL instead')
     } else {
       throw writeError
     }
-  }
-
-  // Cleanup
-  try {
-    oc.FS.unlink(outputPath)
-  } catch (unlinkError) {
-    console.warn('Failed to cleanup output file:', unlinkError.message)
   }
 
   console.log('Sending complete message with', outputData.length, 'bytes')

@@ -1,6 +1,10 @@
 /**
  * OpenCascade Initialization
  * Handles loading and initializing OpenCascade.js in a web worker
+ * Uses v2.0.0-beta (50MB WASM)
+ *
+ * NOTE: STEP export has a known Emscripten issue (getWasmTableEntry).
+ * Falls back to BREP export which works correctly.
  */
 
 /**
@@ -10,9 +14,12 @@
  * @returns {Promise<Object>} OpenCascade.js instance
  */
 export async function initOpenCascade(basePath, postMessage) {
+  // Cache-busting version - increment to force reload
+  const cacheVersion = 'v4'
+
   postMessage({ type: 'progress', message: 'Fetching OpenCascade.js...' })
 
-  const response = await fetch(basePath + 'opencascade/opencascade.full.js')
+  const response = await fetch(basePath + `opencascade/opencascade.full.js?${cacheVersion}`)
   let scriptText = await response.text()
 
   // Remove ES module export statements
@@ -26,6 +33,6 @@ export async function initOpenCascade(basePath, postMessage) {
   postMessage({ type: 'progress', message: 'Initializing WASM (~50MB)...' })
 
   return await Module({
-    locateFile: (file) => basePath + 'opencascade/' + file
+    locateFile: (file) => basePath + `opencascade/${file}?${cacheVersion}`
   })
 }
