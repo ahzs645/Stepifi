@@ -657,50 +657,6 @@ function convertACISLoop(wasm, loopEntity) {
   return null
 }
 
-function buildStraightLineWire(wasm, loopEntity) {
-  if (!loopEntity) return null
-  try {
-    const coedges = loopEntity.getCoedges ? loopEntity.getCoedges() : []
-    if (coedges.length === 0) return null
-
-    const wireBuilder = new wasm.BRepBuilderAPI_MakeWire()
-    let edgesAdded = 0
-
-    for (const coedge of coedges) {
-      const edgeEntity = coedge.getEdge ? coedge.getEdge() : null
-      if (!edgeEntity) continue
-      const startPt = edgeEntity.getStart ? edgeEntity.getStart() : null
-      const endPt = edgeEntity.getEnd ? edgeEntity.getEnd() : null
-      const sv = startPt && startPt.point ? startPt.point : startPt
-      const ev = endPt && endPt.point ? endPt.point : endPt
-      if (!sv || !ev) continue
-      const dx = (ev.x || 0) - (sv.x || 0)
-      const dy = (ev.y || 0) - (sv.y || 0)
-      const dz = (ev.z || 0) - (sv.z || 0)
-      if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-6) continue
-      try {
-        const p1 = new wasm.gp_Pnt(sv.x || 0, sv.y || 0, sv.z || 0)
-        const p2 = new wasm.gp_Pnt(ev.x || 0, ev.y || 0, ev.z || 0)
-        const builder = new wasm.BRepBuilderAPI_MakeEdge(p1, p2)
-        if (builder.isDone()) {
-          const edge = builder.edge()
-          if (coedge.sense === 'reversed') edge.reverse()
-          wireBuilder.add(edge)
-          edgesAdded++
-        }
-      } catch (e) { /* skip edge */ }
-    }
-
-    if (edgesAdded === 0) return null
-    if (wireBuilder.isDone()) return wireBuilder.wire()
-    try {
-      const wire = wireBuilder.wire()
-      if (wire && !wire.isNull()) return wire
-    } catch (e) {}
-  } catch (e) {}
-  return null
-}
-
 /**
  * Collect all edge endpoint coordinates from a face's loops
  */
@@ -847,6 +803,49 @@ function isFaceBboxValid(wasm, face) {
   } catch (e) { return false }
 }
 
+/**
+ * Compute UV bounds from the best available source:
+ * 1. Edge endpoint projection (for cylinder/cone)
+ * 2. Spline knot ranges
+ * 3. Surface explicit range data
+ */
+function computeUVBounds(surfaceEntity, faceEntity, typeName) {
+  // Source 1: Edge endpoint projection (cylinder/cone)
+  if (typeName.includes('cone')) {
+    const pts = collectFaceEndpoints(faceEntity)
+    const bounds = computeCylinderConeUVBounds(surfaceEntity, pts)
+    if (bounds) return bounds
+  }
+
+  // Source 2: Spline knot ranges
+  const nubs = surfaceEntity && (surfaceEntity.spline || surfaceEntity.nubs)
+  if (nubs) {
+    let uMin, uMax, vMin, vMax
+    if (nubs.uKnots && nubs.uKnots.length >= 2) {
+      uMin = nubs.uKnots[0]; uMax = nubs.uKnots[nubs.uKnots.length - 1]
+    }
+    if (nubs.vKnots && nubs.vKnots.length >= 2) {
+      vMin = nubs.vKnots[0]; vMax = nubs.vKnots[nubs.vKnots.length - 1]
+    }
+    if (uMin !== undefined && vMin !== undefined && uMax > uMin && vMax > vMin) {
+      return { uMin, uMax, vMin, vMax }
+    }
+  }
+
+  // Source 3: Explicit range from surface entity
+  if (surfaceEntity && surfaceEntity.range) {
+    const range = surfaceEntity.range
+    let uMin, uMax, vMin, vMax
+    if (range.uRange) { uMin = range.uRange.lower; uMax = range.uRange.upper }
+    if (range.vRange) { vMin = range.vRange.lower; vMax = range.vRange.upper }
+    if (uMin !== undefined && vMin !== undefined && uMax > uMin && vMax > vMin) {
+      return { uMin, uMax, vMin, vMax }
+    }
+  }
+
+  return null
+}
+
 function convertACISFace(wasm, faceEntity) {
   if (!faceEntity) return null
   try {
@@ -873,7 +872,7 @@ function convertACISFace(wasm, faceEntity) {
       return result
     }
 
-    // Approach 1: Wire-based face with full curve reconstruction
+    // PRIMARY: Wire-based face with full curve reconstruction
     if (loops.length > 0) {
       const outerWire = convertACISLoop(wasm, loops[0])
       if (outerWire) {
@@ -890,96 +889,37 @@ function convertACISFace(wasm, faceEntity) {
           if (faceBuilder.isDone()) {
             const result = faceBuilder.face()
             if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
-
           }
         } catch (e) { /* wire-based face failed */ }
       }
     }
 
-    // Approach 2: Straight-line-only wire (approximate edges but valid faces)
-    if (loops.length > 0) {
-      const straightWire = buildStraightLineWire(wasm, loops[0])
-      if (straightWire) {
-        try {
-          const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, 1e-6)
-          faceBuilder.add(straightWire)
-          for (let i = 1; i < loops.length; i++) {
-            const innerWire = buildStraightLineWire(wasm, loops[i])
-            if (innerWire) {
-              innerWire.reverse()
-              faceBuilder.add(innerWire)
-            }
-          }
-          if (faceBuilder.isDone()) {
-            const result = faceBuilder.face()
-            if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
-
-          }
-        } catch (e) { /* straight-line wire face failed */ }
-      }
-    }
-
-    // Approach 3: UV-bounds from edge endpoints (for cylinder/cone surfaces)
-    if (typeName.includes('cone')) {
+    // FALLBACK: UV-bounded face from best available bounds source
+    const bounds = computeUVBounds(surfaceEntity, faceEntity, typeName)
+    if (bounds) {
       try {
-        const pts = collectFaceEndpoints(faceEntity)
-        const bounds = computeCylinderConeUVBounds(surfaceEntity, pts)
-        if (bounds) {
-          const freshSurface = convertACISSurface(wasm, surfaceEntity)
-          const freshHandle = freshSurface ? new wasm.Handle_Geom_Surface(freshSurface) : handleSurface
-          const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(
-            freshHandle, bounds.uMin, bounds.uMax, bounds.vMin, bounds.vMax, 1e-6
-          )
-          if (faceBuilder.isDone()) {
-            const result = faceBuilder.face()
-            if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
-
-          }
+        const freshSurface = convertACISSurface(wasm, surfaceEntity)
+        const freshHandle = freshSurface ? new wasm.Handle_Geom_Surface(freshSurface) : handleSurface
+        const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(
+          freshHandle, bounds.uMin, bounds.uMax, bounds.vMin, bounds.vMax, 1e-6
+        )
+        if (faceBuilder.isDone()) {
+          const result = faceBuilder.face()
+          if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
         }
-      } catch (e) { /* UV bounds approach failed */ }
+      } catch (e) { /* UV bounds face failed */ }
     }
 
-    // Approach 4: Untrimmed face from surface's natural bounds
-    // Works well for sphere, torus, and bounded spline surfaces
-    // Skip for planes — untrimmed planes are huge and hurt sewing
+    // LAST RESORT: Untrimmed face from surface natural bounds (skip planes)
     if (!typeName.includes('plane')) {
       try {
         const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, 1e-6)
         if (faceBuilder.isDone()) {
           const result = faceBuilder.face()
           if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
-
         }
       } catch (e) {}
     }
-
-    // Approach 5: Explicit UV bounds for spline surfaces
-    try {
-      let uMin, uMax, vMin, vMax
-      let hasBounds = false
-      const nubs = surfaceEntity && (surfaceEntity.spline || surfaceEntity.nubs)
-      if (nubs) {
-        if (nubs.uKnots && nubs.uKnots.length >= 2) {
-          uMin = nubs.uKnots[0]; uMax = nubs.uKnots[nubs.uKnots.length - 1]
-        }
-        if (nubs.vKnots && nubs.vKnots.length >= 2) {
-          vMin = nubs.vKnots[0]; vMax = nubs.vKnots[nubs.vKnots.length - 1]
-        }
-        hasBounds = uMin !== undefined && vMin !== undefined
-      }
-      if (surfaceEntity && surfaceEntity.range) {
-        const range = surfaceEntity.range
-        if (range.uRange) { uMin = range.uRange.lower; uMax = range.uRange.upper; hasBounds = true }
-        if (range.vRange) { vMin = range.vRange.lower; vMax = range.vRange.upper; hasBounds = true }
-      }
-      if (hasBounds && uMax > uMin && vMax > vMin) {
-        const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, uMin, uMax, vMin, vMax, 1e-6)
-        if (faceBuilder.isDone()) {
-          const result = faceBuilder.face()
-          return applyAndReturn(result)
-        }
-      }
-    } catch (e) {}
 
   } catch (e) {}
 
@@ -1022,10 +962,48 @@ function convertACISShell(wasm, shellEntity) {
   return null
 }
 
-function tryMakeSolid(wasm, shell) {
-  // Sew faces into proper topology (connects shared edges, makes watertight)
+/**
+ * Compute adaptive sewing tolerance based on shape bounding box.
+ * Uses a relative tolerance of 1e-4 of the bounding box diagonal,
+ * floored at baseTol (from ACIS header resabs or default 1e-6).
+ */
+function computeSewingTolerance(wasm, shell, options = {}) {
+  let baseTol = 1e-6
+
+  // Use ACIS header resabs if available
+  const headers = options.acisHeaders || []
+  if (headers.length > 0) {
+    for (const h of headers) {
+      if (h.resabs && h.resabs > baseTol) baseTol = h.resabs
+    }
+  }
+
+  // Scale by bounding box diagonal for larger models
   try {
-    const sewing = new wasm.BRepBuilderAPI_Sewing(1e-6, true, true, true, false)
+    const bb = new wasm.Bnd_Box()
+    wasm.BRepBndLib.add(shell, bb)
+    if (!bb.isVoid()) {
+      const b = bb.get()
+      const diag = Math.sqrt(
+        (b.xmax - b.xmin) ** 2 + (b.ymax - b.ymin) ** 2 + (b.zmax - b.zmin) ** 2
+      )
+      // Relative tolerance: ~1e-4 of diagonal, floor at baseTol
+      const scaledTol = diag * 1e-4
+      baseTol = Math.max(baseTol, scaledTol)
+    }
+  } catch (e) { /* fallback to baseTol */ }
+
+  // Cap at 0.1 to avoid overly aggressive sewing
+  return Math.min(baseTol, 0.1)
+}
+
+/**
+ * Try sewing at a given tolerance and extract solids from the result.
+ * Returns { shape, hasSolids, isClosed } or null on failure.
+ */
+function sewAtTolerance(wasm, shell, tolerance) {
+  try {
+    const sewing = new wasm.BRepBuilderAPI_Sewing(tolerance, true, true, true, false)
     sewing.add(shell)
     sewing.perform(new wasm.Message_ProgressRange())
     const sewedShape = sewing.sewedShape()
@@ -1042,18 +1020,51 @@ function tryMakeSolid(wasm, shell) {
       solidExplorer.next()
     }
 
-    if (solids.length === 1) return solids[0]
-    if (solids.length > 1) {
+    let resultShape
+    if (solids.length === 1) {
+      resultShape = solids[0]
+    } else if (solids.length > 1) {
       const builder = new wasm.BRep_Builder()
       const compound = builder.makeCompound()
       for (const s of solids) builder.add(compound, s)
-      return compound
+      resultShape = compound
+    } else {
+      resultShape = sewedShape
     }
 
-    // No solids from sewing — return sewed shape directly to preserve all faces
-    // (extracting only shells loses disconnected faces)
-    return sewedShape
+    // Check closure
+    let isClosed = false
+    try { isClosed = wasm.Shape.isClosed(resultShape) } catch (e) {}
+
+    return { shape: resultShape, hasSolids: solids.length > 0, isClosed }
   } catch (e) {}
+  return null
+}
+
+function tryMakeSolid(wasm, shell, options = {}) {
+  const baseTol = computeSewingTolerance(wasm, shell, options)
+
+  // Try sewing at computed tolerance
+  let result = sewAtTolerance(wasm, shell, baseTol)
+
+  // If not closed, retry with progressively larger tolerances
+  if (result && !result.isClosed) {
+    const retryTols = [baseTol * 10, baseTol * 100]
+    for (const tol of retryTols) {
+      if (tol > 0.1) break // cap
+      const retry = sewAtTolerance(wasm, shell, tol)
+      if (retry && retry.isClosed) {
+        result = retry
+        break
+      }
+      // Use retry if it found solids even if not closed
+      if (retry && retry.hasSolids && !result.hasSolids) {
+        result = retry
+      }
+    }
+  }
+
+  if (result) return result.shape
 
   // Fallback: direct MakeSolid
   try {
@@ -1064,7 +1075,7 @@ function tryMakeSolid(wasm, shell) {
   return shell
 }
 
-function convertACISBody(wasm, bodyEntity) {
+function convertACISBody(wasm, bodyEntity, options = {}) {
   if (!bodyEntity) return null
   try {
     const lumps = bodyEntity.getLumps ? bodyEntity.getLumps() : []
@@ -1075,7 +1086,7 @@ function convertACISBody(wasm, bodyEntity) {
       for (const shellEntity of lumpShells) {
         const shell = convertACISShell(wasm, shellEntity)
         if (shell) {
-          solidsAndShells.push(tryMakeSolid(wasm, shell))
+          solidsAndShells.push(tryMakeSolid(wasm, shell, options))
         }
       }
     }
@@ -1110,7 +1121,7 @@ function hasValidBoundingBox(wasm, shape) {
   }
 }
 
-export function convertACISBodiesToShape(wasm, bodies) {
+export function convertACISBodiesToShape(wasm, bodies, options = {}) {
   if (!bodies || bodies.length === 0) return null
 
   const shapes = []
@@ -1118,7 +1129,7 @@ export function convertACISBodiesToShape(wasm, bodies) {
 
   for (let i = 0; i < bodies.length; i++) {
     const body = bodies[i]
-    const shape = convertACISBody(wasm, body)
+    const shape = convertACISBody(wasm, body, options)
     if (shape) {
       if (hasValidBoundingBox(wasm, shape)) {
         shapes.push(shape)

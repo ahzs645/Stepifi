@@ -61,9 +61,12 @@ async function handleAnalyze(data) {
       throw new Error('F3D support requires ACIS module (not loaded)')
     }
 
-    const bodies = await self.ACISParser.parseF3D(fileData, loadJSZip)
+    const parseResult = await self.ACISParser.parseF3D(fileData, loadJSZip)
+    // Support both old (array) and new (object) return format
+    const bodies = parseResult.bodies || parseResult
+    const acisHeaders = parseResult.headers || []
     postProgress(`Found ${bodies.length} ACIS bodies, converting...`)
-    shape = convertACISBodiesToShape(wasm, bodies)
+    shape = convertACISBodiesToShape(wasm, bodies, { acisHeaders })
 
     // Count faces from ACIS data
     for (const body of bodies) {
@@ -209,7 +212,10 @@ async function handleConvert(data) {
       throw new Error('F3D support requires ACIS module (not loaded)')
     }
 
-    const bodies = await self.ACISParser.parseF3D(fileData, loadJSZip)
+    const parseResult = await self.ACISParser.parseF3D(fileData, loadJSZip)
+    // Support both old (array) and new (object) return format
+    const bodies = parseResult.bodies || parseResult
+    const acisHeaders = parseResult.headers || []
     postProgress(`Found ${bodies.length} ACIS bodies, converting geometry...`)
 
     // Count total ACIS faces
@@ -223,7 +229,7 @@ async function handleConvert(data) {
       }
     }
 
-    const shape = convertACISBodiesToShape(wasm, bodies)
+    const shape = convertACISBodiesToShape(wasm, bodies, { acisHeaders })
     if (!shape) throw new Error('Failed to convert ACIS geometry')
 
     // Analyze BEFORE processing
@@ -231,12 +237,12 @@ async function handleConvert(data) {
     beforeStats = analyzeMesh(wasm, shape, totalTriangles)
     self.postMessage({ type: 'beforeStats', data: beforeStats })
 
-    // F3D shapes are already B-rep, minimal repair needed
+    // F3D shapes are B-rep — enable simplification for ShapeFix orientation repair
     const processResult = processShape(wasm, shape, {
       tolerance,
       repair,
       mergeFacesOpt,
-      skipMerge: true, // F3D shapes are already clean B-rep
+      skipMerge: false,
       faceCount: beforeStats.faceCount || totalTriangles
     }, self.postMessage.bind(self))
     shapes.push(processResult.shape)

@@ -30,6 +30,9 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Solid.hxx>
 #include <TopoDS_Compound.hxx>
+#include <ShapeFix_Shape.hxx>
+#include <ShapeFix_Shell.hxx>
+#include <ShapeFix_Solid.hxx>
 
 using namespace emscripten;
 
@@ -174,4 +177,25 @@ EMSCRIPTEN_BINDINGS(stepifi_brep_builder) {
     // Message_ProgressRange (needed for Sewing.Perform)
     class_<Message_ProgressRange>("Message_ProgressRange")
         .constructor<>();
+
+    // ShapeFix_Shape - general purpose shape fixer (orientation, closure, geometry)
+    class_<ShapeFix_Shape>("ShapeFix_Shape")
+        .constructor<const TopoDS_Shape&>()
+        .function("perform", &ShapeFix_Shape::Perform)
+        .function("shape", &ShapeFix_Shape::Shape)
+        .function("setTolerance", &ShapeFix_Shape::SetTolerance)
+        .function("setMaxTolerance", &ShapeFix_Shape::SetMaxTolerance)
+        .function("setMinTolerance", &ShapeFix_Shape::SetMinTolerance);
+
+    // ShapeFix_Shell - shell orientation fixer
+    class_<ShapeFix_Shell>("ShapeFix_Shell")
+        .constructor<const TopoDS_Shell&>()
+        .function("perform", &ShapeFix_Shell::Perform)
+        .function("shell", &ShapeFix_Shell::Shell);
+
+    // ShapeFix_Solid - solid closure fixer
+    class_<ShapeFix_Solid>("ShapeFix_Solid")
+        .constructor<const TopoDS_Solid&>()
+        .function("perform", &ShapeFix_Solid::Perform)
+        .function("solid", static_cast<TopoDS_Solid(ShapeFix_Solid::*)() const>(&ShapeFix_Solid::Solid));
 }

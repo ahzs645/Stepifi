@@ -1,7 +1,7 @@
 /**
  * ACIS Parser Bundle
  * Auto-generated from acis-js modules
- * Generated: 2026-03-10T03:16:40.080Z
+ * Generated: 2026-03-11T04:23:34.855Z
  *
  * For use with Web Workers via importScripts()
  */
@@ -4761,7 +4761,7 @@ class SurfaceCone extends Surface {
     // Python format: center axis major ratio range sine cosine scale sense urange vrange
     ;[this.center, i] = getLocation(chunks, i)
     ;[this.axis, i] = getVector(chunks, i)
-    ;[this.major, i] = getLocation(chunks, i)  // Scaled direction+radius vector (matches Python Acis.py)
+    ;[this.major, i] = getVector(chunks, i)  // Direction vector, not scalar
     ;[this.ratio, i] = getFloat(chunks, i)
     ;[this.range, i] = getInterval(chunks, i, MIN_INF, MAX_INF, getScale())
     ;[this.sine, i] = getFloat(chunks, i)
@@ -9928,6 +9928,18 @@ function parseAcisBinary(data) {
 }
 
 /**
+ * Parse ACIS binary data and return bodies + header metadata
+ */
+function parseAcisBinaryWithHeader(data) {
+  const reader = new AcisReader()
+  if (!reader.readBinary(data)) {
+    throw new Error('Failed to parse ACIS binary data')
+  }
+  reader.resolveEntities(RECORD_2_ENTITY)
+  return { bodies: reader.bodies, header: reader.header }
+}
+
+/**
  * Parse ACIS text data and return bodies
  */
 function parseAcisText(data) {
@@ -10023,48 +10035,47 @@ function findACISDataStart(data) {
 
 /**
  * Parse F3D file (Fusion 360 ZIP format)
+ * Returns { bodies: Body[], headers: Header[] } with ACIS header metadata
  */
 async function parseF3D(arrayBuffer, loadJSZip) {
   const JSZip = await loadJSZip()
   const zip = await JSZip.loadAsync(arrayBuffer)
   const files = Object.keys(zip.files)
 
-  // Note: Reference implementation only processes .smbh files, not .smb files
-  // .smb files appear to use a different/unsupported format
-  const smbhFiles = files.filter(f => f.toLowerCase().endsWith('.smbh'))
-  const smbFiles = files.filter(f => f.toLowerCase().endsWith('.smb'))
+  // Process both .smbh and .smb files — both contain ACIS binary (SAB) data
+  const brepFiles = files.filter(f => {
+    const lower = f.toLowerCase()
+    return lower.endsWith('.smbh') || lower.endsWith('.smb')
+  })
 
-  if (smbhFiles.length === 0 && smbFiles.length === 0) {
+  if (brepFiles.length === 0) {
     throw new Error('No ACIS binary data (.smb/.smbh) found in F3D file')
   }
 
-  if (smbFiles.length > 0) {
-    console.log('Skipping ' + smbFiles.length + ' .smb files (unsupported format)')
-  }
-
   const allBodies = []
+  const allHeaders = []
 
-  for (const smbFile of smbhFiles) {
+  for (const brepFile of brepFiles) {
     try {
-      const smbData = await zip.file(smbFile).async('arraybuffer')
-      const smbBytes = new Uint8Array(smbData)
-      console.log('Parsing ' + smbFile + ': ' + smbData.byteLength + ' bytes')
+      const brepData = await zip.file(brepFile).async('arraybuffer')
+      const brepBytes = new Uint8Array(brepData)
+      console.log('Parsing ' + brepFile + ': ' + brepData.byteLength + ' bytes')
 
       // Check if this is direct ACIS format or has a wrapper
-      const headerStr = new TextDecoder().decode(smbBytes.slice(0, 15))
-      let dataToparse = smbBytes
+      const headerStr = new TextDecoder().decode(brepBytes.slice(0, 15))
+      let dataToparse = brepBytes
 
       if (!headerStr.startsWith('ACIS BinaryFile') && !headerStr.startsWith('ASM BinaryFile')) {
-        // SMB files may have a header - try to find ACIS data start
-        const acisStart = findACISDataStart(smbBytes)
+        // SMB/SMBH files may have a wrapper header — find ACIS data start
+        const acisStart = findACISDataStart(brepBytes)
         if (acisStart > 0) {
           console.log('  Found ACIS data at offset ' + acisStart)
-          dataToparse = smbBytes.slice(acisStart)
+          dataToparse = brepBytes.slice(acisStart)
         } else {
-          // Try to find 'ACIS' or 'ASM ' marker in file
+          // Scan for 'ACIS' or 'ASM ' marker in first 4KB
           let foundOffset = -1
-          for (let i = 0; i < Math.min(4096, smbBytes.length - 15); i++) {
-            const chunk = new TextDecoder().decode(smbBytes.slice(i, i + 15))
+          for (let i = 0; i < Math.min(4096, brepBytes.length - 15); i++) {
+            const chunk = new TextDecoder().decode(brepBytes.slice(i, i + 15))
             if (chunk.startsWith('ACIS BinaryFile') || chunk.startsWith('ASM BinaryFile')) {
               foundOffset = i
               break
@@ -10072,16 +10083,17 @@ async function parseF3D(arrayBuffer, loadJSZip) {
           }
           if (foundOffset >= 0) {
             console.log('  Found ACIS header at offset ' + foundOffset)
-            dataToparse = smbBytes.slice(foundOffset)
+            dataToparse = brepBytes.slice(foundOffset)
           }
         }
       }
 
-      const bodies = parseAcisBinary(dataToparse)
-      console.log('  Found ' + bodies.length + ' bodies')
-      allBodies.push(...bodies)
+      const result = parseAcisBinaryWithHeader(dataToparse)
+      console.log('  Found ' + result.bodies.length + ' bodies')
+      allBodies.push(...result.bodies)
+      if (result.header) allHeaders.push(result.header)
     } catch (e) {
-      console.warn('Failed to parse ' + smbFile + ':', e.message)
+      console.warn('Failed to parse ' + brepFile + ':', e.message)
       console.warn(e.stack)
     }
   }
@@ -10090,7 +10102,7 @@ async function parseF3D(arrayBuffer, loadJSZip) {
     throw new Error('No geometry bodies found in F3D file')
   }
 
-  return allBodies
+  return { bodies: allBodies, headers: allHeaders }
 }
 
 // Note: Geometry conversion functions (convertACISSurface, convertACISCurve, etc.)
@@ -10108,6 +10120,7 @@ global.ACIS = {
   // Parsing functions
   parseAcis,
   parseAcisBinary,
+  parseAcisBinaryWithHeader,
   parseAcisText,
   parseF3D,
 
