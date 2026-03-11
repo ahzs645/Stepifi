@@ -1,7 +1,7 @@
 /**
  * Web Worker for chili-wasm OCCT 7.9.1 STL/3MF to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-03-11T04:53:01.962Z
+ * Generated: 2026-03-11T06:02:05.825Z
  * Backend: chili
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
@@ -2167,6 +2167,7 @@ function convertACISLoop(wasm, loopEntity) {
     let edgesAdded = 0
 
     for (const coedge of coedges) {
+      _diag.edgeTotal++
       const edgeEntity = coedge.getEdge ? coedge.getEdge() : null
       const edge = convertACISEdge(wasm, edgeEntity)
       if (edge) {
@@ -2174,7 +2175,10 @@ function convertACISLoop(wasm, loopEntity) {
         try {
           wireBuilder.add(edge)
           edgesAdded++
-        } catch (e) { /* edge might not connect */ }
+          _diag.edgeOk++
+        } catch (e) { _diag.wireEdgesDrop++ }
+      } else {
+        _diag.edgeFail++
       }
     }
 
@@ -2337,17 +2341,183 @@ function isFaceBboxValid(wasm, face) {
 }
 
 /**
+ * Compute the X direction that OCC's gp_Ax3(P, N) would choose.
+ * This matches the exact algorithm in OCC source (gp_Ax3.cxx).
+ */
+function computeAx3XDir(axis) {
+  const A = axis.x, B = axis.y, C = axis.z
+  const Aabs = Math.abs(A), Babs = Math.abs(B), Cabs = Math.abs(C)
+  let xd
+  if (Babs <= Aabs && Babs <= Cabs) {
+    xd = Aabs > Cabs ? { x: -C, y: 0, z: A } : { x: C, y: 0, z: -A }
+  } else if (Aabs <= Babs && Aabs <= Cabs) {
+    xd = Babs > Cabs ? { x: 0, y: -C, z: B } : { x: 0, y: C, z: -B }
+  } else {
+    xd = Aabs > Babs ? { x: -B, y: A, z: 0 } : { x: B, y: -A, z: 0 }
+  }
+  const len = Math.sqrt(xd.x ** 2 + xd.y ** 2 + xd.z ** 2)
+  if (len < 1e-15) return { x: 1, y: 0, z: 0 }
+  return { x: xd.x / len, y: xd.y / len, z: xd.z / len }
+}
+
+/**
+ * Compute angular UV bounds from edge endpoints for a surface with rotational symmetry.
+ * Projects 3D points into the surface's parametric space using axis + xDir + yDir.
+ * Returns { uMin, uMax, vMin, vMax } or null.
+ *
+ * vProjectFn(dx, dy, dz, xd, yd, axis) → v parameter for each point
+ */
+function computeAngularUVBounds(surfaceEntity, faceEntity, axis, xd, yd, vProjectFn) {
+  const pts = collectFaceEndpoints(faceEntity)
+  if (pts.length < 2) return null
+  const center = surfaceEntity.center
+  if (!center) return null
+
+  const uAngles = [], vParams = []
+  for (const p of pts) {
+    const dx = p.x - center.x, dy = p.y - center.y, dz = p.z - center.z
+    const pxd = dx * xd.x + dy * xd.y + dz * xd.z
+    const pyd = dx * yd.x + dy * yd.y + dz * yd.z
+    uAngles.push(Math.atan2(pyd, pxd))
+    vParams.push(vProjectFn(dx, dy, dz, pxd, pyd))
+  }
+
+  // Compute U bounds with wrap-around
+  const uSorted = [...uAngles].sort((a, b) => a - b)
+  let maxGap = 0, gapStart = 0
+  for (let gi = 0; gi < uSorted.length - 1; gi++) {
+    const gap = uSorted[gi + 1] - uSorted[gi]
+    if (gap > maxGap) { maxGap = gap; gapStart = gi }
+  }
+  const wrapGap = 2 * Math.PI - (uSorted[uSorted.length - 1] - uSorted[0])
+  let uMin, uMax
+  if (wrapGap > maxGap) { uMin = uSorted[0]; uMax = uSorted[uSorted.length - 1] }
+  else { uMin = uSorted[gapStart + 1]; uMax = uSorted[gapStart] + 2 * Math.PI }
+
+  // Compute V bounds (simple min/max for sphere, wrap-around for torus)
+  const vMin = Math.min(...vParams), vMax = Math.max(...vParams)
+
+  const uPad = (uMax - uMin) * 0.02 || 0.02
+  const vPad = (vMax - vMin) * 0.02 || 0.02
+  if (uMax - uMin > 1e-6 && vMax - vMin > 1e-6) {
+    return { uMin: uMin - uPad, uMax: uMax + uPad, vMin: vMin - vPad, vMax: vMax + vPad }
+  }
+  return null
+}
+
+/**
  * Compute UV bounds from the best available source:
  * 1. Edge endpoint projection (for cylinder/cone)
  * 2. Spline knot ranges
  * 3. Surface explicit range data
  */
 function computeUVBounds(surfaceEntity, faceEntity, typeName) {
-  // Source 1: Edge endpoint projection (cylinder/cone)
+  // Source 1a: Edge endpoint projection (cylinder/cone)
   if (typeName.includes('cone')) {
     const pts = collectFaceEndpoints(faceEntity)
     const bounds = computeCylinderConeUVBounds(surfaceEntity, pts)
     if (bounds) return bounds
+  }
+
+  // Source 1b-sphere: Edge endpoint projection for sphere
+  // OCC sphere S(u,v) = Center + R*cos(v)*(cos(u)*XDir + sin(u)*YDir) + R*sin(v)*Axis
+  // v ∈ [-π/2, π/2]
+  if (typeName.includes('sphere') && surfaceEntity) {
+    const poleRaw = surfaceEntity.pole || { x: 0, y: 0, z: 1 }
+    const radius = surfaceEntity.radius || 1.0
+    const pLen = Math.sqrt(poleRaw.x ** 2 + poleRaw.y ** 2 + poleRaw.z ** 2)
+    if (pLen > 1e-10) {
+      const axis = { x: poleRaw.x / pLen, y: poleRaw.y / pLen, z: poleRaw.z / pLen }
+      const xd = computeAx3XDir(axis)
+      const yd = { x: axis.y * xd.z - axis.z * xd.y, y: axis.z * xd.x - axis.x * xd.z, z: axis.x * xd.y - axis.y * xd.x }
+      const bounds = computeAngularUVBounds(surfaceEntity, faceEntity, axis, xd, yd,
+        (dx, dy, dz, pxd, pyd) => {
+          const pzd = dx * axis.x + dy * axis.y + dz * axis.z
+          return Math.asin(Math.max(-1, Math.min(1, pzd / Math.max(radius, 1e-10))))
+        })
+      if (bounds) return bounds
+      // Debug: log sphere UV failure
+      if (!_diag._sphereDbg) {
+        _diag._sphereDbg = true
+        const pts = collectFaceEndpoints(faceEntity)
+        const c = surfaceEntity.center
+        console.log(`[GeoBridge] Sphere UV debug: pts=${pts.length}, center=(${c?.x?.toFixed(2)},${c?.y?.toFixed(2)},${c?.z?.toFixed(2)}), pole=${JSON.stringify(surfaceEntity.pole)}, r=${radius}`)
+        // Compute angles manually for debug
+        if (pts.length >= 2 && c) {
+          const uA = [], vA = []
+          for (const p of pts) {
+            const dx = p.x - c.x, dy = p.y - c.y, dz = p.z - c.z
+            const px = dx * xd.x + dy * xd.y + dz * xd.z
+            const py = dx * yd.x + dy * yd.y + dz * yd.z
+            const pz = dx * axis.x + dy * axis.y + dz * axis.z
+            uA.push(Math.atan2(py, px))
+            vA.push(Math.asin(Math.max(-1, Math.min(1, pz / Math.max(radius, 1e-10)))))
+          }
+          console.log(`[GeoBridge]   U angles: ${uA.map(a=>a.toFixed(6)).join(', ')}`)
+          console.log(`[GeoBridge]   V angles: ${vA.map(a=>a.toFixed(6)).join(', ')}`)
+          console.log(`[GeoBridge]   U span: ${(Math.max(...uA)-Math.min(...uA)).toFixed(8)}, V span: ${(Math.max(...vA)-Math.min(...vA)).toFixed(8)}`)
+        }
+      }
+    }
+  }
+
+  // Source 1c-torus: Edge endpoint projection for torus
+  // OCC torus S(u,v) = Center + (R+r*cos(v))*(cos(u)*XDir + sin(u)*YDir) + r*sin(v)*Axis
+  if (typeName.includes('torus') && surfaceEntity) {
+    const axisRaw = surfaceEntity.axis
+    const majorR = Math.abs(surfaceEntity.major) || 2.0
+    if (axisRaw) {
+      const aLen = Math.sqrt(axisRaw.x ** 2 + axisRaw.y ** 2 + axisRaw.z ** 2)
+      if (aLen > 1e-10) {
+        const axis = { x: axisRaw.x / aLen, y: axisRaw.y / aLen, z: axisRaw.z / aLen }
+        const xd = computeAx3XDir(axis)
+        const yd = { x: axis.y * xd.z - axis.z * xd.y, y: axis.z * xd.x - axis.x * xd.z, z: axis.x * xd.y - axis.y * xd.x }
+        const bounds = computeAngularUVBounds(surfaceEntity, faceEntity, axis, xd, yd,
+          (dx, dy, dz, pxd, pyd) => {
+            const pzd = dx * axis.x + dy * axis.y + dz * axis.z
+            const dist = Math.sqrt(pxd * pxd + pyd * pyd)
+            return Math.atan2(pzd, dist - majorR)
+          })
+        if (bounds) return bounds
+      }
+    }
+  }
+
+  // Source 1b: Plane UV bounds from edge endpoints
+  if (typeName.includes('plane') && surfaceEntity) {
+    const pts = collectFaceEndpoints(faceEntity)
+    if (pts.length >= 3) {
+      const origin = surfaceEntity.origin || surfaceEntity.root
+      const normalRaw = surfaceEntity.normal
+      if (origin && normalRaw) {
+        const nLen = Math.sqrt(normalRaw.x ** 2 + normalRaw.y ** 2 + normalRaw.z ** 2)
+        if (nLen > 1e-10) {
+          const n = { x: normalRaw.x / nLen, y: normalRaw.y / nLen, z: normalRaw.z / nLen }
+          // Pick a reference direction not parallel to normal
+          let ref = Math.abs(n.x) < 0.9 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 }
+          // xDir = ref - (ref·n)*n, normalized
+          const dot = ref.x * n.x + ref.y * n.y + ref.z * n.z
+          let xd = { x: ref.x - dot * n.x, y: ref.y - dot * n.y, z: ref.z - dot * n.z }
+          const xLen = Math.sqrt(xd.x ** 2 + xd.y ** 2 + xd.z ** 2)
+          if (xLen > 1e-10) {
+            xd = { x: xd.x / xLen, y: xd.y / xLen, z: xd.z / xLen }
+            const yd = { x: n.y * xd.z - n.z * xd.y, y: n.z * xd.x - n.x * xd.z, z: n.x * xd.y - n.y * xd.x }
+            let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity
+            for (const p of pts) {
+              const dx = p.x - origin.x, dy = p.y - origin.y, dz = p.z - origin.z
+              const u = dx * xd.x + dy * xd.y + dz * xd.z
+              const v = dx * yd.x + dy * yd.y + dz * yd.z
+              if (u < uMin) uMin = u; if (u > uMax) uMax = u
+              if (v < vMin) vMin = v; if (v > vMax) vMax = v
+            }
+            if (uMax - uMin > 1e-10 && vMax - vMin > 1e-10) {
+              const pad = Math.max((uMax - uMin), (vMax - vMin)) * 0.02
+              return { uMin: uMin - pad, uMax: uMax + pad, vMin: vMin - pad, vMax: vMax + pad }
+            }
+          }
+        }
+      }
+    }
   }
 
   // Source 2: Spline knot ranges
@@ -2379,12 +2549,30 @@ function computeUVBounds(surfaceEntity, faceEntity, typeName) {
   return null
 }
 
+// Diagnostic counters (reset per conversion)
+const _diag = { faces: 0, wireOk: 0, wireFail: 0, uvOk: 0, untrimOk: 0, fail: 0,
+                edgeTotal: 0, edgeOk: 0, edgeFail: 0, wireEdgesDrop: 0,
+                surfFail: 0, surfTypes: {} }
+
+function resetDiag() {
+  _diag.faces = _diag.wireOk = _diag.wireFail = _diag.uvOk = _diag.untrimOk = _diag.fail = 0
+  _diag.edgeTotal = _diag.edgeOk = _diag.edgeFail = _diag.wireEdgesDrop = _diag.surfFail = 0
+  _diag.surfTypes = {}
+}
+
+function printDiag() {
+  console.log(`[GeoBridge] Faces: ${_diag.faces} | Wire: ${_diag.wireOk} | UV: ${_diag.uvOk} | Untrim: ${_diag.untrimOk} | Fail: ${_diag.fail} | WireFail: ${_diag.wireFail}`)
+  console.log(`[GeoBridge] Edges: ${_diag.edgeOk}/${_diag.edgeTotal} ok | ${_diag.edgeFail} fail | ${_diag.wireEdgesDrop} wire-drop | SurfFail: ${_diag.surfFail}`)
+  console.log(`[GeoBridge] SurfTypes:`, JSON.stringify(_diag.surfTypes))
+}
+
 function convertACISFace(wasm, faceEntity) {
   if (!faceEntity) return null
+  _diag.faces++
   try {
     const surfaceEntity = faceEntity.getSurface ? faceEntity.getSurface() : null
     const surface = convertACISSurface(wasm, surfaceEntity)
-    if (!surface) return null
+    if (!surface) { _diag.surfFail++; _diag.fail++; return null }
 
     const handleSurface = new wasm.Handle_Geom_Surface(surface)
     const loops = faceEntity.getLoops ? faceEntity.getLoops() : []
@@ -2393,6 +2581,7 @@ function convertACISFace(wasm, faceEntity) {
     // - Cone: flip when cosine < 0
     // - Torus: flip when minor radius < 0
     const typeName = surfaceEntity && surfaceEntity.getType ? surfaceEntity.getType() : ''
+    _diag.surfTypes[typeName] = (_diag.surfTypes[typeName] || 0) + 1
     let shouldReverse = (faceEntity.sense === 'reversed')
     if (typeName.includes('cone') && surfaceEntity.cosine < 0) {
       shouldReverse = !shouldReverse
@@ -2409,21 +2598,42 @@ function convertACISFace(wasm, faceEntity) {
     if (loops.length > 0) {
       const outerWire = convertACISLoop(wasm, loops[0])
       if (outerWire) {
-        try {
-          const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, 1e-6)
-          faceBuilder.add(outerWire)
-          for (let i = 1; i < loops.length; i++) {
-            const innerWire = convertACISLoop(wasm, loops[i])
-            if (innerWire) {
-              innerWire.reverse()
-              faceBuilder.add(innerWire)
+        // Collect inner wires
+        const innerWires = []
+        for (let k = 1; k < loops.length; k++) {
+          const iw = convertACISLoop(wasm, loops[k])
+          if (iw) { iw.reverse(); innerWires.push(iw) }
+        }
+
+        // Try surface+wire with increasing tolerance
+        let wireFaceOk = false
+        for (const tol of [1e-6, 1e-3, 1e-2]) {
+          try {
+            const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, tol)
+            faceBuilder.add(outerWire)
+            for (const iw of innerWires) faceBuilder.add(iw)
+            if (faceBuilder.isDone()) {
+              const result = faceBuilder.face()
+              if (isFaceBboxValid(wasm, result)) { _diag.wireOk++; wireFaceOk = true; return applyAndReturn(result) }
             }
-          }
-          if (faceBuilder.isDone()) {
-            const result = faceBuilder.face()
-            if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
-          }
-        } catch (e) { /* wire-based face failed */ }
+          } catch (e) { /* try next tolerance */ }
+        }
+
+        // For planes: try MakeFace from wire alone (infers planar surface)
+        if (!wireFaceOk && typeName.includes('plane')) {
+          try {
+            const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(outerWire)
+            if (faceBuilder.isDone()) {
+              for (const iw of innerWires) faceBuilder.add(iw)
+              const result = faceBuilder.face()
+              if (isFaceBboxValid(wasm, result)) { _diag.wireOk++; return applyAndReturn(result) }
+            }
+          } catch (e) { /* wire-only plane failed */ }
+        }
+
+        _diag.wireFail++
+      } else {
+        _diag.wireFail++
       }
     }
 
@@ -2438,7 +2648,7 @@ function convertACISFace(wasm, faceEntity) {
         )
         if (faceBuilder.isDone()) {
           const result = faceBuilder.face()
-          if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
+          if (isFaceBboxValid(wasm, result)) { _diag.uvOk++; return applyAndReturn(result) }
         }
       } catch (e) { /* UV bounds face failed */ }
     }
@@ -2449,12 +2659,13 @@ function convertACISFace(wasm, faceEntity) {
         const faceBuilder = new wasm.BRepBuilderAPI_MakeFace(handleSurface, 1e-6)
         if (faceBuilder.isDone()) {
           const result = faceBuilder.face()
-          if (isFaceBboxValid(wasm, result)) return applyAndReturn(result)
+          if (isFaceBboxValid(wasm, result)) { _diag.untrimOk++; return applyAndReturn(result) }
         }
       } catch (e) {}
     }
 
-  } catch (e) {}
+    _diag.fail++
+  } catch (e) { _diag.fail++ }
 
   return null
 }
@@ -2657,6 +2868,7 @@ function hasValidBoundingBox(wasm, shape) {
 function convertACISBodiesToShape(wasm, bodies, options = {}) {
   if (!bodies || bodies.length === 0) return null
 
+  resetDiag()
   const shapes = []
   let skippedBodies = 0
 
@@ -2674,6 +2886,7 @@ function convertACISBodiesToShape(wasm, bodies, options = {}) {
     }
   }
 
+  printDiag()
   if (shapes.length === 0) throw new Error('Failed to convert any ACIS bodies to geometry')
   if (shapes.length === 1) return shapes[0]
 
