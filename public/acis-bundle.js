@@ -1,7 +1,7 @@
 /**
  * ACIS Parser Bundle
  * Auto-generated from acis-js modules
- * Generated: 2026-03-11T04:23:34.855Z
+ * Generated: 2026-03-11T04:52:58.191Z
  *
  * For use with Web Workers via importScripts()
  */
@@ -4262,7 +4262,7 @@ class CurveInt extends Curve {
     }
 
     try {
-      if (getVersion() >= 25.0) {
+      if (getVersion() >= 25.0 && !isASM()) {
         ;[this.id, i] = getInteger(chunks, i)
       }
       const reader = getReader()
@@ -4280,7 +4280,8 @@ class CurveInt extends Curve {
         throw new Error(`Method ${prm[0]} not found for intcurve '${this.subtype}'`)
       }
 
-      return fkt.call(this, chunks, i, prm[2])
+      // prm[1] = chunk offset before calling method (matches Python: fkt(chunks, i + prm[1], prm[2]))
+      return fkt.call(this, chunks, i + prm[1], prm[2])
     } catch (e) {
       console.error(`Error parsing intcurve '${this.subtype}':`, e.message)
       return i
@@ -10042,14 +10043,19 @@ async function parseF3D(arrayBuffer, loadJSZip) {
   const zip = await JSZip.loadAsync(arrayBuffer)
   const files = Object.keys(zip.files)
 
-  // Process both .smbh and .smb files — both contain ACIS binary (SAB) data
-  const brepFiles = files.filter(f => {
-    const lower = f.toLowerCase()
-    return lower.endsWith('.smbh') || lower.endsWith('.smb')
-  })
+  // Prefer .smbh files (historical B-rep snapshots used by InventorLoader/FreeCAD).
+  // Only fall back to .smb files when no .smbh files are available, since .smb
+  // may contain duplicate/conflicting geometry that breaks sewing.
+  const smbhFiles = files.filter(f => f.toLowerCase().endsWith('.smbh'))
+  const smbFiles = files.filter(f => f.toLowerCase().endsWith('.smb'))
+  const brepFiles = smbhFiles.length > 0 ? smbhFiles : smbFiles
 
   if (brepFiles.length === 0) {
     throw new Error('No ACIS binary data (.smb/.smbh) found in F3D file')
+  }
+
+  if (smbhFiles.length > 0 && smbFiles.length > 0) {
+    console.log('Using ' + smbhFiles.length + ' .smbh file(s), skipping ' + smbFiles.length + ' .smb file(s)')
   }
 
   const allBodies = []

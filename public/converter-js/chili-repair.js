@@ -20,6 +20,7 @@ export function processShape(wasm, shape, options = {}, postMessage) {
     repair = true,
     mergeFacesOpt = true,
     skipMerge: forceSkipMerge = false,
+    skipSolidCreation = false,
     faceCount = 0
   } = options
 
@@ -39,7 +40,9 @@ export function processShape(wasm, shape, options = {}, postMessage) {
   }
 
   // Try to create solid from shells
-  if (repair) {
+  // Skip for F3D — tryMakeSolid in geometry bridge already creates solids per-shell.
+  // Re-running ShapeFactory.solid on all shells destroys per-body topology.
+  if (repair && !skipSolidCreation) {
     postMessage({ type: 'progress', message: 'Creating solid...' })
     try {
       const shells = wasm.Shape.findSubShapes(processedShape, wasm.TopAbs_ShapeEnum.TopAbs_SHELL)

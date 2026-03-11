@@ -237,12 +237,15 @@ async function handleConvert(data) {
     beforeStats = analyzeMesh(wasm, shape, totalTriangles)
     self.postMessage({ type: 'beforeStats', data: beforeStats })
 
-    // F3D shapes are B-rep — enable simplification for ShapeFix orientation repair
+    // F3D shapes are already B-rep with per-shell solids from tryMakeSolid.
+    // Skip both global solid re-creation (destroys per-body topology) and
+    // simplifyShape (merges co-planar faces, destroys detail).
     const processResult = processShape(wasm, shape, {
       tolerance,
       repair,
       mergeFacesOpt,
-      skipMerge: false,
+      skipMerge: true,
+      skipSolidCreation: true,
       faceCount: beforeStats.faceCount || totalTriangles
     }, self.postMessage.bind(self))
     shapes.push(processResult.shape)

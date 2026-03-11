@@ -957,7 +957,7 @@ export class CurveInt extends Curve {
     }
 
     try {
-      if (getVersion() >= 25.0) {
+      if (getVersion() >= 25.0 && !isASM()) {
         ;[this.id, i] = getInteger(chunks, i)
       }
       const reader = getReader()
@@ -975,7 +975,8 @@ export class CurveInt extends Curve {
         throw new Error(`Method ${prm[0]} not found for intcurve '${this.subtype}'`)
       }
 
-      return fkt.call(this, chunks, i, prm[2])
+      // prm[1] = chunk offset before calling method (matches Python: fkt(chunks, i + prm[1], prm[2]))
+      return fkt.call(this, chunks, i + prm[1], prm[2])
     } catch (e) {
       console.error(`Error parsing intcurve '${this.subtype}':`, e.message)
       return i

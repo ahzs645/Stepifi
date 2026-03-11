@@ -1,7 +1,7 @@
 /**
  * Web Worker for chili-wasm OCCT 7.9.1 STL/3MF to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-03-11T04:24:07.069Z
+ * Generated: 2026-03-11T04:53:01.962Z
  * Backend: chili
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
@@ -1443,6 +1443,7 @@ function processShape(wasm, shape, options = {}, postMessage) {
     repair = true,
     mergeFacesOpt = true,
     skipMerge: forceSkipMerge = false,
+    skipSolidCreation = false,
     faceCount = 0
   } = options
 
@@ -1462,7 +1463,9 @@ function processShape(wasm, shape, options = {}, postMessage) {
   }
 
   // Try to create solid from shells
-  if (repair) {
+  // Skip for F3D — tryMakeSolid in geometry bridge already creates solids per-shell.
+  // Re-running ShapeFactory.solid on all shells destroys per-body topology.
+  if (repair && !skipSolidCreation) {
     postMessage({ type: 'progress', message: 'Creating solid...' })
     try {
       const shells = wasm.Shape.findSubShapes(processedShape, wasm.TopAbs_ShapeEnum.TopAbs_SHELL)
@@ -2908,12 +2911,15 @@ async function handleConvert(data) {
     beforeStats = analyzeMesh(wasm, shape, totalTriangles)
     self.postMessage({ type: 'beforeStats', data: beforeStats })
 
-    // F3D shapes are B-rep — enable simplification for ShapeFix orientation repair
+    // F3D shapes are already B-rep with per-shell solids from tryMakeSolid.
+    // Skip both global solid re-creation (destroys per-body topology) and
+    // simplifyShape (merges co-planar faces, destroys detail).
     const processResult = processShape(wasm, shape, {
       tolerance,
       repair,
       mergeFacesOpt,
-      skipMerge: false,
+      skipMerge: true,
+      skipSolidCreation: true,
       faceCount: beforeStats.faceCount || totalTriangles
     }, self.postMessage.bind(self))
     shapes.push(processResult.shape)

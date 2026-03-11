@@ -285,14 +285,19 @@ async function parseF3D(arrayBuffer, loadJSZip) {
   const zip = await JSZip.loadAsync(arrayBuffer)
   const files = Object.keys(zip.files)
 
-  // Process both .smbh and .smb files — both contain ACIS binary (SAB) data
-  const brepFiles = files.filter(f => {
-    const lower = f.toLowerCase()
-    return lower.endsWith('.smbh') || lower.endsWith('.smb')
-  })
+  // Prefer .smbh files (historical B-rep snapshots used by InventorLoader/FreeCAD).
+  // Only fall back to .smb files when no .smbh files are available, since .smb
+  // may contain duplicate/conflicting geometry that breaks sewing.
+  const smbhFiles = files.filter(f => f.toLowerCase().endsWith('.smbh'))
+  const smbFiles = files.filter(f => f.toLowerCase().endsWith('.smb'))
+  const brepFiles = smbhFiles.length > 0 ? smbhFiles : smbFiles
 
   if (brepFiles.length === 0) {
     throw new Error('No ACIS binary data (.smb/.smbh) found in F3D file')
+  }
+
+  if (smbhFiles.length > 0 && smbFiles.length > 0) {
+    console.log('Using ' + smbhFiles.length + ' .smbh file(s), skipping ' + smbFiles.length + ' .smb file(s)')
   }
 
   const allBodies = []
