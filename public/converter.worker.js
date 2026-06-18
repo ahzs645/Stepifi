@@ -1,7 +1,7 @@
 /**
  * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-06-18T18:26:44.625Z
+ * Generated: 2026-06-18T18:41:22.479Z
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
  *           large mesh optimization, JavaScript mesh repairs, fallback strategies,

@@ -1362,7 +1362,7 @@ function fixFacePCurves(oc, face) {
  * projecting a point of it onto the surface, then take the full U period.
  * Returns the face, or null if this isn't a clean band case.
  */
-function tryPeriodicBandFace(oc, surfaceEntity, handleSurface, faceEntity) {
+function tryPeriodicBandFace(oc, surfaceEntity, handleSurface, faceEntity, ctx) {
   const tname = surfaceEntity && surfaceEntity.getType ? surfaceEntity.getType() : ''
   // ACIS 'cone-surface' covers both cones and cylinders (sine≈0).
   if (!tname.includes('cone')) return null
@@ -1370,37 +1370,37 @@ function tryPeriodicBandFace(oc, surfaceEntity, handleSurface, faceEntity) {
   const loops = faceEntity.getLoops ? faceEntity.getLoops() : []
   if (loops.length < 2) return null // need two circular ends to bound a band
 
-  let sas
-  try {
-    sas = new oc.ShapeAnalysis_Surface(handleSurface)
-  } catch (e) {
-    return null
-  }
-
-  // Map each bounding circle to a surface V parameter by projecting a point of it.
-  const vs = []
+  // Each end must be a single closed circle.
+  const circleStarts = []
   for (const loop of loops) {
     const coedges = loop.getCoedges ? loop.getCoedges() : []
-    if (coedges.length !== 1) return null // each end must be a single closed circle
+    if (coedges.length !== 1) return null
     const edge = coedges[0].getEdge ? coedges[0].getEdge() : null
     const curve = edge && edge.getCurve ? edge.getCurve() : null
     const ct = curve && curve.getType ? curve.getType() : ''
     if (!ct.includes('ellipse')) return null
     let sp = edge.getStart ? edge.getStart() : null
     if (sp && sp.point) sp = sp.point
-    if (!sp) return null
-    try {
+    circleStarts.push(sp || null)
+  }
+
+  // Reference V range from projecting the two circles — used both to build the
+  // UV fallback and to sanity-check the wire-built band didn't escape.
+  let vMin = null, vMax = null
+  try {
+    const sas = new oc.ShapeAnalysis_Surface(handleSurface)
+    const vs = []
+    for (const sp of circleStarts) {
+      if (!sp) return null
       const uv = sas.ValueOfUV(makePoint(oc, sp), 1e-6)
       vs.push(uv.Y())
-    } catch (e) {
-      return null
     }
+    vMin = Math.min(...vs)
+    vMax = Math.max(...vs)
+    if (!(vMax - vMin > 1e-6)) return null
+  } catch (e) {
+    return null
   }
-  if (vs.length < 2) return null
-
-  const vMin = Math.min(...vs)
-  const vMax = Math.max(...vs)
-  if (!(vMax - vMin > 1e-6)) return null
 
   try {
     // Full U period + the V range between the two circles → the closed band.
@@ -1436,12 +1436,10 @@ export function convertACISFace(oc, faceEntity, ctx) {
     const handleSurface = new oc.Handle_Geom_Surface_2(surface)
     const loops = faceEntity.getLoops ? faceEntity.getLoops() : []
 
-    // Periodic cone/cylinder band (frustum/tube with circular ends): build from
-    // UV bounds with a native seam, never by wire-trimming a single circle.
-    // These are constructed directly from the (correct) bounding-circle V params,
-    // so they're trusted as-is — a bbox guard would wrongly reject them because
-    // BRepBndLib over-reports an analytic cone's extent toward its apex.
-    const band = tryPeriodicBandFace(oc, surfaceEntity, handleSurface, faceEntity)
+    // Periodic cone/cylinder band (frustum/tube with circular ends): built from
+    // the shared bounding-circle wires (so its rims share edges with the adjacent
+    // caps and the solid can close), falling back to UV bounds.
+    const band = tryPeriodicBandFace(oc, surfaceEntity, handleSurface, faceEntity, ctx)
     if (band) {
       return band
     }
@@ -1572,7 +1570,7 @@ export function convertACISFace(oc, faceEntity, ctx) {
 /**
  * Convert ACIS shell to OpenCascade shell
  */
-export function convertACISShell(oc, shellEntity) {
+export function convertACISShell(oc, shellEntity, ctx) {
   if (!shellEntity) return null
 
   try {
@@ -1591,7 +1589,7 @@ export function convertACISShell(oc, shellEntity) {
       // at high-valence corners and drops ~20% of faces; building faces
       // independently and letting the sewing stage merge coincident edges keeps
       // them all. convertACISFace already validates and bounds each face.
-      const face = convertACISFace(oc, faceEntity)
+      const face = convertACISFace(oc, faceEntity, ctx)
       if (face) {
         try {
           shellBuilder.Add(shell, face)
@@ -1667,7 +1665,7 @@ function tryMakeSolid(oc, shell) {
 /**
  * Convert ACIS body to OpenCascade solid
  */
-export function convertACISBody(oc, bodyEntity) {
+export function convertACISBody(oc, bodyEntity, ctx) {
   if (!bodyEntity) return null
 
   try {
@@ -1677,7 +1675,7 @@ export function convertACISBody(oc, bodyEntity) {
     for (const lump of lumps) {
       const lumpShells = lump.getShells ? lump.getShells() : []
       for (const shellEntity of lumpShells) {
-        const shell = convertACISShell(oc, shellEntity)
+        const shell = convertACISShell(oc, shellEntity, ctx)
         if (shell) {
           // Try to convert shell to solid
           const solidOrShell = tryMakeSolid(oc, shell)
@@ -1743,6 +1741,12 @@ export function convertACISBodiesToShape(oc, bodies) {
 
   console.log(`  Converting ${bodies.length} ACIS bodies to OpenCascade shapes...`)
 
+  // One shared conversion context across ALL bodies, so faces reference the SAME
+  // vertices and edges (the ASM parse fragments one design into many bodies that
+  // share edges). Shared topology lets sewing recognise the shared edges and
+  // close shells into solids instead of leaving a soup of disconnected faces.
+  const ctx = createConvCtx()
+
   const shapes = []
   let totalFaces = 0
   let skippedBodies = 0
@@ -1751,7 +1755,7 @@ export function convertACISBodiesToShape(oc, bodies) {
     const body = bodies[i]
     console.log(`  Processing body ${i + 1}/${bodies.length}...`)
 
-    const shape = convertACISBody(oc, body)
+    const shape = convertACISBody(oc, body, ctx)
     if (shape) {
       // Validate bounding box before adding
       if (hasValidBoundingBox(oc, shape)) {
