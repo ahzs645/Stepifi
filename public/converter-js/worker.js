@@ -364,7 +364,7 @@ async function handleConvert(data) {
 
   // Write output
   let actualFormat = outputFormat
-  let ext = outputFormat === 'stl' ? 'stl' : 'step'
+  let ext = outputFormat === 'stl' ? 'stl' : (outputFormat === 'brep' ? 'brep' : 'step')
   let outputPath = `/output.${ext}`
   let outputData
 
@@ -387,25 +387,34 @@ async function handleConvert(data) {
     }
   }
 
+  let readPath = outputPath
   try {
-    writeOutput(oc, finalShape, actualFormat, outputPath)
+    const writeResult = writeOutput(oc, finalShape, actualFormat, outputPath)
+    actualFormat = writeResult.format
+    readPath = writeResult.path
+
+    // Surface honest fallbacks to the user (e.g. requested STEP, got .brep).
+    if (writeResult.format !== outputFormat) {
+      allRepairs.push(`Requested ${outputFormat.toUpperCase()} but exported ${writeResult.format.toUpperCase()} (${writeResult.approach || 'fallback'})`)
+    } else if (writeResult.wireframe) {
+      allRepairs.push('STEP exported as wireframe only (no solid faces)')
+    }
 
     // Read the output file
-    const stat = oc.FS.stat(outputPath)
-    console.log('Output file size:', stat.size, 'bytes')
-    outputData = oc.FS.readFile(outputPath)
+    const stat = oc.FS.stat(readPath)
+    console.log('Output file size:', stat.size, 'bytes (format ' + actualFormat + ')')
+    outputData = oc.FS.readFile(readPath)
     console.log('Read', outputData.length, 'bytes from output file')
   } catch (writeError) {
     console.warn('Primary export failed:', writeError.message)
 
-    // If STEP export failed, fall back to STL
-    if (actualFormat === 'step' && writeError.message === 'STEP_EXPORT_FAILED') {
+    // If STEP export failed entirely, fall back to STL
+    if ((actualFormat === 'step' || outputFormat === 'step') && writeError.message === 'STEP_EXPORT_FAILED') {
       console.log('Falling back to STL export...')
       postProgress('STEP export failed, falling back to STL...')
 
-      actualFormat = 'stl'
       ext = 'stl'
-      outputPath = `/output.${ext}`
+      readPath = `/output.${ext}`
 
       // For STL, we need to mesh the geometry first
       postProgress('Meshing geometry for STL export...')
@@ -422,11 +431,13 @@ async function handleConvert(data) {
         console.warn('Meshing failed:', meshErr.message)
       }
 
-      writeOutput(oc, finalShape, actualFormat, outputPath)
+      const writeResult = writeOutput(oc, finalShape, 'stl', readPath)
+      actualFormat = writeResult.format
+      readPath = writeResult.path
 
-      const stat = oc.FS.stat(outputPath)
+      const stat = oc.FS.stat(readPath)
       console.log('STL fallback output file size:', stat.size, 'bytes')
-      outputData = oc.FS.readFile(outputPath)
+      outputData = oc.FS.readFile(readPath)
 
       allRepairs.push('STEP export failed, exported as STL instead')
     } else {
@@ -436,7 +447,7 @@ async function handleConvert(data) {
 
   // Cleanup
   try {
-    oc.FS.unlink(outputPath)
+    oc.FS.unlink(readPath)
   } catch (unlinkError) {
     console.warn('Failed to cleanup output file:', unlinkError.message)
   }

@@ -1,7 +1,7 @@
 /**
  * ACIS Parser Bundle
  * Auto-generated from acis-js modules
- * Generated: 2026-01-19T01:47:30.690Z
+ * Generated: 2026-06-18T14:05:43.847Z
  *
  * For use with Web Workers via importScripts()
  */
@@ -10022,68 +10022,82 @@ function findACISDataStart(data) {
 }
 
 /**
+ * Locate the start of the ACIS/ASM binary stream inside an SMB/SMBH blob.
+ * Most Fusion blobs begin directly with the "ASM BinaryFile" magic, but some
+ * are wrapped with a small header, so fall back to scanning for the magic.
+ */
+function locateAcisData(bytes) {
+  const headerStr = new TextDecoder().decode(bytes.slice(0, 15))
+  if (headerStr.startsWith('ACIS BinaryFile') || headerStr.startsWith('ASM BinaryFile')) {
+    return bytes
+  }
+
+  const acisStart = findACISDataStart(bytes)
+  if (acisStart > 0) {
+    console.log('  Found ACIS data at offset ' + acisStart)
+    return bytes.slice(acisStart)
+  }
+
+  for (let i = 0; i < Math.min(4096, bytes.length - 15); i++) {
+    const chunk = new TextDecoder().decode(bytes.slice(i, i + 15))
+    if (chunk.startsWith('ACIS BinaryFile') || chunk.startsWith('ASM BinaryFile')) {
+      console.log('  Found ACIS header at offset ' + i)
+      return bytes.slice(i)
+    }
+  }
+
+  return bytes
+}
+
+/**
  * Parse F3D file (Fusion 360 ZIP format)
+ *
+ * Geometry-preference policy: prefer the ".smb" blobs, which carry the clean
+ * analytic solid B-rep (plane/cone/cylinder + line/circle/ellipse). The ".smbh"
+ * blobs are the "heavy" variant: the same solid plus the full parametric/sketch/
+ * attribute layer (NURBS pcurve approximations, null_surface, delta_state, custom
+ * attribs). That extra layer is irrelevant to the output solid and, in practice,
+ * trips the binary parser (e.g. "Unknown ACIS tag 0x0"). We therefore parse ".smb"
+ * first and only fall back to ".smbh" when no ".smb" geometry is available.
  */
 async function parseF3D(arrayBuffer, loadJSZip) {
   const JSZip = await loadJSZip()
   const zip = await JSZip.loadAsync(arrayBuffer)
   const files = Object.keys(zip.files)
 
-  // Note: Reference implementation only processes .smbh files, not .smb files
-  // .smb files appear to use a different/unsupported format
-  const smbhFiles = files.filter(f => f.toLowerCase().endsWith('.smbh'))
   const smbFiles = files.filter(f => f.toLowerCase().endsWith('.smb'))
+  const smbhFiles = files.filter(f => f.toLowerCase().endsWith('.smbh'))
 
-  if (smbhFiles.length === 0 && smbFiles.length === 0) {
+  if (smbFiles.length === 0 && smbhFiles.length === 0) {
     throw new Error('No ACIS binary data (.smb/.smbh) found in F3D file')
   }
 
-  if (smbFiles.length > 0) {
-    console.log('Skipping ' + smbFiles.length + ' .smb files (unsupported format)')
+  async function parseList(list) {
+    const bodies = []
+    for (const name of list) {
+      try {
+        const buf = await zip.file(name).async('arraybuffer')
+        const bytes = new Uint8Array(buf)
+        console.log('Parsing ' + name + ': ' + buf.byteLength + ' bytes')
+        const parsed = parseAcisBinary(locateAcisData(bytes))
+        console.log('  Found ' + parsed.length + ' bodies')
+        bodies.push(...parsed)
+      } catch (e) {
+        console.warn('Failed to parse ' + name + ':', e.message)
+      }
+    }
+    return bodies
   }
 
-  const allBodies = []
+  // Preferred path: clean analytic solid in .smb
+  let allBodies = smbFiles.length > 0 ? await parseList(smbFiles) : []
 
-  for (const smbFile of smbhFiles) {
-    try {
-      const smbData = await zip.file(smbFile).async('arraybuffer')
-      const smbBytes = new Uint8Array(smbData)
-      console.log('Parsing ' + smbFile + ': ' + smbData.byteLength + ' bytes')
-
-      // Check if this is direct ACIS format or has a wrapper
-      const headerStr = new TextDecoder().decode(smbBytes.slice(0, 15))
-      let dataToparse = smbBytes
-
-      if (!headerStr.startsWith('ACIS BinaryFile') && !headerStr.startsWith('ASM BinaryFile')) {
-        // SMB files may have a header - try to find ACIS data start
-        const acisStart = findACISDataStart(smbBytes)
-        if (acisStart > 0) {
-          console.log('  Found ACIS data at offset ' + acisStart)
-          dataToparse = smbBytes.slice(acisStart)
-        } else {
-          // Try to find 'ACIS' or 'ASM ' marker in file
-          let foundOffset = -1
-          for (let i = 0; i < Math.min(4096, smbBytes.length - 15); i++) {
-            const chunk = new TextDecoder().decode(smbBytes.slice(i, i + 15))
-            if (chunk.startsWith('ACIS BinaryFile') || chunk.startsWith('ASM BinaryFile')) {
-              foundOffset = i
-              break
-            }
-          }
-          if (foundOffset >= 0) {
-            console.log('  Found ACIS header at offset ' + foundOffset)
-            dataToparse = smbBytes.slice(foundOffset)
-          }
-        }
-      }
-
-      const bodies = parseAcisBinary(dataToparse)
-      console.log('  Found ' + bodies.length + ' bodies')
-      allBodies.push(...bodies)
-    } catch (e) {
-      console.warn('Failed to parse ' + smbFile + ':', e.message)
-      console.warn(e.stack)
+  // Fallback: only reach for the heavy .smbh blobs if .smb produced nothing
+  if (allBodies.length === 0 && smbhFiles.length > 0) {
+    if (smbFiles.length > 0) {
+      console.log('.smb blobs yielded no geometry; falling back to ' + smbhFiles.length + ' .smbh blob(s)')
     }
+    allBodies = await parseList(smbhFiles)
   }
 
   if (allBodies.length === 0) {

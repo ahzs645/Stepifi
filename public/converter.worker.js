@@ -1,7 +1,7 @@
 /**
  * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-01-19T02:52:55.441Z
+ * Generated: 2026-06-18T14:06:15.394Z
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
  *           large mesh optimization, JavaScript mesh repairs, fallback strategies,
@@ -1368,7 +1368,51 @@ function deepValidateShape(oc, shape) {
 }
 
 /**
- * Write output file (STEP or STL)
+ * Lightweight structural validation that a file OCC just wrote is genuine STEP
+ * (ISO-10303-21 header + footer + at least one geometry entity). This is the
+ * in-pipeline gate that stops a malformed or non-STEP payload from being
+ * accepted as STEP. step-parser provides the authoritative gate at the app
+ * boundary; this keeps the worker self-contained with no extra wasm.
+ */
+function validateStepText(oc, filePath) {
+  try {
+    const bytes = oc.FS.readFile(filePath) // Uint8Array
+    if (!bytes || bytes.length === 0) return { valid: false, reason: 'empty file' }
+
+    const decoder = new TextDecoder()
+    const head = decoder.decode(bytes.subarray(0, Math.min(bytes.length, 256)))
+    if (!head.startsWith('ISO-10303-21')) {
+      return { valid: false, reason: 'missing ISO-10303-21 header' }
+    }
+
+    const tail = decoder.decode(bytes.subarray(Math.max(0, bytes.length - 128)))
+    if (!tail.includes('END-ISO-10303-21')) {
+      return { valid: false, reason: 'missing END-ISO-10303-21 footer' }
+    }
+
+    const text = decoder.decode(bytes)
+    const hasBrep = /MANIFOLD_SOLID_BREP|CLOSED_SHELL|OPEN_SHELL|SHELL_BASED_SURFACE_MODEL|ADVANCED_FACE/.test(text)
+    const hasCurveSet = /GEOMETRIC_CURVE_SET|GEOMETRIC_SET/.test(text)
+    if (!hasBrep && !hasCurveSet) {
+      return { valid: false, reason: 'no B-rep or curve-set geometry entities' }
+    }
+    return { valid: true, wireframe: !hasBrep && hasCurveSet, bytes: bytes.length }
+  } catch (e) {
+    return { valid: false, reason: 'read/parse error: ' + e.message }
+  }
+}
+
+/**
+ * Write output file.
+ *
+ * Returns { format, path, approach?, wireframe? } describing what was ACTUALLY
+ * written. Fallbacks NEVER masquerade as STEP: if true B-rep STEP cannot be
+ * produced, the BREP/IGES fallbacks are written to correctly-named sibling
+ * paths and the real format is reported, so the caller can name the download
+ * honestly (e.g. ".brep") instead of handing the user a ".step" that isn't one.
+ *
+ * @param {'step'|'stl'|'brep'} format - requested output format
+ * @returns {{format:string, path:string, approach?:string, wireframe?:boolean}}
  */
 function writeOutput(oc, shape, format, filePath) {
   // Validate shape before export
@@ -1413,276 +1457,178 @@ function writeOutput(oc, shape, format, filePath) {
 
   if (format === 'stl') {
     // Use static StlAPI.Write method - third parameter is ASCII mode (false = binary)
-    const success = oc.StlAPI.Write(shape, filePath, false)
-    if (!success) {
+    const ok = oc.StlAPI.Write(shape, filePath, false)
+    if (!ok) {
       throw new Error('Failed to write STL file')
     }
-  } else {
-    // STEP format - try multiple approaches
-    let success = false
+    return { format: 'stl', path: filePath }
+  }
 
-    // First try: Rebuild compound with only validated faces
-    let cleanShape = shape
-    if (!isDeepValid) {
-      console.log('Attempting to rebuild shape with only valid faces...')
-      try {
-        const builder = new oc.BRep_Builder()
-        const compound = new oc.TopoDS_Compound()
-        builder.MakeCompound(compound)
+  if (format === 'brep') {
+    // Native OpenCascade B-rep, written directly (no STEP translation).
+    const ok = oc.BRepTools.Write_3(shape, filePath, new oc.Message_ProgressRange_1())
+    if (!ok) {
+      throw new Error('Failed to write BREP file')
+    }
+    return { format: 'brep', path: filePath }
+  }
 
-        let addedFaces = 0
-        const faceExplorer = new oc.TopExp_Explorer_2(
-          shape,
-          oc.TopAbs_ShapeEnum.TopAbs_FACE,
-          oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-        )
+  // STEP format - try multiple approaches, validating each before accepting it.
+  let result = null
 
-        while (faceExplorer.More()) {
-          try {
-            const face = oc.TopoDS.Face_1(faceExplorer.Current())
-            const surface = oc.BRep_Tool.Surface_2(face)
-            if (surface && !surface.IsNull()) {
-              builder.Add(compound, face)
-              addedFaces++
-            }
-          } catch (e) {
-            // Skip invalid face
+  // First try: Rebuild compound with only validated faces
+  let cleanShape = shape
+  if (!isDeepValid) {
+    console.log('Attempting to rebuild shape with only valid faces...')
+    try {
+      const builder = new oc.BRep_Builder()
+      const compound = new oc.TopoDS_Compound()
+      builder.MakeCompound(compound)
+
+      let addedFaces = 0
+      const faceExplorer = new oc.TopExp_Explorer_2(
+        shape,
+        oc.TopAbs_ShapeEnum.TopAbs_FACE,
+        oc.TopAbs_ShapeEnum.TopAbs_SHAPE
+      )
+
+      while (faceExplorer.More()) {
+        try {
+          const face = oc.TopoDS.Face_1(faceExplorer.Current())
+          const surface = oc.BRep_Tool.Surface_2(face)
+          if (surface && !surface.IsNull()) {
+            builder.Add(compound, face)
+            addedFaces++
           }
-          faceExplorer.Next()
+        } catch (e) {
+          // Skip invalid face
         }
-
-        if (addedFaces > 0) {
-          console.log(`Rebuilt compound with ${addedFaces} valid faces`)
-          cleanShape = compound
-        }
-      } catch (e) {
-        console.warn('Failed to rebuild shape:', e.message)
+        faceExplorer.Next()
       }
-    }
 
-    // Approach 1: Standard STEPControl_Writer
-    if (!success) {
-      try {
-        console.log('STEP Approach 1: STEPControl_Writer...')
-        const writer = new oc.STEPControl_Writer_1()
-
-        console.log('Transferring shape to STEP...')
-        writer.Transfer(
-          cleanShape,
-          oc.STEPControl_StepModelType.STEPControl_AsIs,
-          true,
-          new oc.Message_ProgressRange_1()
-        )
-
-        console.log('Writing STEP to file...')
-        const writeStatus = writer.Write(filePath)
-        console.log('STEP write completed with status:', writeStatus)
-        if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-          success = true
-        }
-      } catch (e) {
-        console.warn('STEP Approach 1 failed:', e.message)
+      if (addedFaces > 0) {
+        console.log(`Rebuilt compound with ${addedFaces} valid faces`)
+        cleanShape = compound
       }
-    }
-
-    // Approach 2: Try with STEPControl_ManifoldSolidBrep mode
-    if (!success) {
-      try {
-        console.log('STEP Approach 2: ManifoldSolidBrep mode...')
-        const writer = new oc.STEPControl_Writer_1()
-
-        writer.Transfer(
-          cleanShape,
-          oc.STEPControl_StepModelType.STEPControl_ManifoldSolidBrep,
-          true,
-          new oc.Message_ProgressRange_1()
-        )
-
-        const writeStatus = writer.Write(filePath)
-        if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-          success = true
-          console.log('STEP Approach 2 succeeded')
-        }
-      } catch (e) {
-        console.warn('STEP Approach 2 failed:', e.message)
-      }
-    }
-
-    // Approach 3: Try with ShellBasedSurfaceModel mode
-    if (!success) {
-      try {
-        console.log('STEP Approach 3: ShellBasedSurfaceModel mode...')
-        const writer = new oc.STEPControl_Writer_1()
-
-        writer.Transfer(
-          cleanShape,
-          oc.STEPControl_StepModelType.STEPControl_ShellBasedSurfaceModel,
-          true,
-          new oc.Message_ProgressRange_1()
-        )
-
-        const writeStatus = writer.Write(filePath)
-        if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-          success = true
-          console.log('STEP Approach 3 succeeded')
-        }
-      } catch (e) {
-        console.warn('STEP Approach 3 failed:', e.message)
-      }
-    }
-
-    // Approach 4: Try BREP round-trip (export to BREP, re-import, then STEP)
-    if (!success) {
-      try {
-        console.log('STEP Approach 4: BREP round-trip...')
-        const brepPath = '/temp_export.brep'
-
-        // Export as BREP first using Write_3 (the working method)
-        let brepSuccess = false
-
-        // Write_3 takes (shape, filename, progressRange) and works!
-        if (!brepSuccess && oc.BRepTools.Write_3) {
-          try {
-            brepSuccess = oc.BRepTools.Write_3(cleanShape, brepPath, new oc.Message_ProgressRange_1())
-            console.log('  BRepTools.Write_3 succeeded')
-          } catch (e) {
-            console.log('  BRepTools.Write_3 failed:', e.message)
-          }
-        }
-
-        if (brepSuccess) {
-          console.log('  BREP export succeeded, re-importing...')
-          // Re-import the BREP
-          const reimportedShape = new oc.TopoDS_Shape()
-          const brepBuilder = new oc.BRep_Builder()
-          const readSuccess = oc.BRepTools.Read_2(reimportedShape, brepPath, brepBuilder, new oc.Message_ProgressRange_1())
-
-          if (readSuccess && !reimportedShape.IsNull()) {
-            console.log('  BREP re-import succeeded, exporting to STEP...')
-            // Now try STEP export with the re-imported shape
-            const writer = new oc.STEPControl_Writer_1()
-            writer.Transfer(
-              reimportedShape,
-              oc.STEPControl_StepModelType.STEPControl_AsIs,
-              true,
-              new oc.Message_ProgressRange_1()
-            )
-
-            const writeStatus = writer.Write(filePath)
-            if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-              success = true
-              console.log('STEP Approach 4 (BREP round-trip) succeeded')
-            }
-          }
-
-          // Cleanup temp file
-          try { oc.FS.unlink(brepPath) } catch (e) {}
-        }
-      } catch (e) {
-        console.warn('STEP Approach 4 failed:', e.message)
-      }
-    }
-
-    // Approach 5: Direct BREP export (save as .brep file - real solid geometry)
-    if (!success) {
-      try {
-        console.log('STEP Approach 5: Direct BREP export...')
-        const brepPath = filePath.replace('.step', '.brep')
-
-        let brepSuccess = false
-
-        // Write_3 takes (shape, filename, progressRange) and works!
-        if (oc.BRepTools.Write_3) {
-          try {
-            brepSuccess = oc.BRepTools.Write_3(cleanShape, brepPath, new oc.Message_ProgressRange_1())
-            console.log('  BRepTools.Write_3 succeeded')
-          } catch (e) {
-            console.log('  BRepTools.Write_3 failed:', e.message)
-          }
-        }
-
-        if (brepSuccess) {
-          // Read BREP and save to original STEP path
-          try {
-            const brepData = oc.FS.readFile(brepPath)
-            oc.FS.writeFile(filePath, brepData)
-            oc.FS.unlink(brepPath)
-            success = true
-            console.log('BREP export succeeded (note: file is BREP format, not STEP)')
-          } catch (e2) {
-            console.warn('BREP file operations failed:', e2.message)
-          }
-        }
-      } catch (e) {
-        console.warn('STEP Approach 5 failed:', e.message)
-      }
-    }
-
-    // Approach 6: Try IGES export (different code path, might work where STEP fails)
-    if (!success && oc.IGESControl_Writer_1) {
-      try {
-        console.log('STEP Approach 6: IGES export (alternative format)...')
-        const igesPath = filePath.replace('.step', '.iges')
-
-        // Initialize IGES controller first (required!)
-        oc.IGESControl_Controller.Init()
-
-        const igesWriter = new oc.IGESControl_Writer_1()
-        // AddShape with progress range
-        igesWriter.AddShape(cleanShape, new oc.Message_ProgressRange_1())
-        igesWriter.ComputeModel()
-        // Write_2 takes (filename, progressRange)
-        const igesStatus = igesWriter.Write_2(igesPath, new oc.Message_ProgressRange_1())
-
-        if (igesStatus) {
-          // Read IGES file and save to output path
-          try {
-            const igesData = oc.FS.readFile(igesPath)
-            // Save as .iges extension (not pretending to be STEP)
-            const actualIgesPath = filePath.replace('.step', '.iges')
-            oc.FS.writeFile(actualIgesPath, igesData)
-            oc.FS.unlink(igesPath)
-            // Also write to original path so download works
-            oc.FS.writeFile(filePath, igesData)
-            success = true
-            console.log('IGES export succeeded (file is IGES format)')
-          } catch (e2) {
-            console.warn('IGES file operations failed:', e2.message)
-          }
-        }
-      } catch (e) {
-        console.warn('STEP Approach 6 (IGES) failed:', e.message)
-      }
-    }
-
-    // Approach 7: GeometricCurveSet mode (wireframe only - last resort)
-    if (!success) {
-      try {
-        console.log('STEP Approach 7: GeometricCurveSet mode (wireframe)...')
-        const writer = new oc.STEPControl_Writer_1()
-
-        writer.Transfer(
-          cleanShape,
-          oc.STEPControl_StepModelType.STEPControl_GeometricCurveSet,
-          true,
-          new oc.Message_ProgressRange_1()
-        )
-
-        const writeStatus = writer.Write(filePath)
-        if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
-          success = true
-          console.log('STEP Approach 7 succeeded (wireframe only - no solid faces)')
-        }
-      } catch (e) {
-        console.warn('STEP Approach 7 failed:', e.message)
-      }
-    }
-
-    if (!success) {
-      console.error('All STEP export approaches failed')
-      throw new Error('STEP_EXPORT_FAILED')
+    } catch (e) {
+      console.warn('Failed to rebuild shape:', e.message)
     }
   }
+
+  // Helper: STEPControl_Writer transfer in `modeKey`, accepted only if the file
+  // it produced passes structural STEP validation (never accept blind success).
+  const tryStepMode = (label, modeKey) => {
+    try {
+      console.log('STEP ' + label + '...')
+      const writer = new oc.STEPControl_Writer_1()
+      writer.Transfer(cleanShape, oc.STEPControl_StepModelType[modeKey], true, new oc.Message_ProgressRange_1())
+      const writeStatus = writer.Write(filePath)
+      if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
+        const v = validateStepText(oc, filePath)
+        if (v.valid) {
+          console.log('  -> valid STEP, ' + v.bytes + ' bytes' + (v.wireframe ? ' (wireframe only)' : ''))
+          return { format: 'step', path: filePath, approach: label, wireframe: !!v.wireframe }
+        }
+        console.warn('  -> wrote a file but it failed STEP validation: ' + v.reason)
+      }
+    } catch (e) {
+      console.warn('STEP ' + label + ' failed:', e.message)
+    }
+    return null
+  }
+
+  result = tryStepMode('Approach 1: STEPControl_Writer (AsIs)', 'STEPControl_AsIs')
+  if (!result) result = tryStepMode('Approach 2: ManifoldSolidBrep', 'STEPControl_ManifoldSolidBrep')
+  if (!result) result = tryStepMode('Approach 3: ShellBasedSurfaceModel', 'STEPControl_ShellBasedSurfaceModel')
+
+  // Approach 4: BREP round-trip (export to BREP, re-import, then STEP)
+  if (!result) {
+    try {
+      console.log('STEP Approach 4: BREP round-trip...')
+      const brepPath = '/temp_export.brep'
+      let brepSuccess = false
+      if (oc.BRepTools.Write_3) {
+        try {
+          brepSuccess = oc.BRepTools.Write_3(cleanShape, brepPath, new oc.Message_ProgressRange_1())
+        } catch (e) {
+          console.log('  BRepTools.Write_3 failed:', e.message)
+        }
+      }
+      if (brepSuccess) {
+        const reimportedShape = new oc.TopoDS_Shape()
+        const brepBuilder = new oc.BRep_Builder()
+        const readSuccess = oc.BRepTools.Read_2(reimportedShape, brepPath, brepBuilder, new oc.Message_ProgressRange_1())
+        if (readSuccess && !reimportedShape.IsNull()) {
+          const writer = new oc.STEPControl_Writer_1()
+          writer.Transfer(reimportedShape, oc.STEPControl_StepModelType.STEPControl_AsIs, true, new oc.Message_ProgressRange_1())
+          const writeStatus = writer.Write(filePath)
+          if (writeStatus === oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
+            const v = validateStepText(oc, filePath)
+            if (v.valid) {
+              result = { format: 'step', path: filePath, approach: 'Approach 4: BREP round-trip', wireframe: !!v.wireframe }
+            } else {
+              console.warn('STEP Approach 4 file failed validation: ' + v.reason)
+            }
+          }
+        }
+        try { oc.FS.unlink(brepPath) } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('STEP Approach 4 failed:', e.message)
+    }
+  }
+
+  // Approach 5 (last STEP resort): GeometricCurveSet — valid STEP, wireframe only.
+  if (!result) result = tryStepMode('Approach 5: GeometricCurveSet (wireframe)', 'STEPControl_GeometricCurveSet')
+
+  // Honest fallbacks: if true STEP is impossible, write a real neutral B-rep file
+  // with its CORRECT extension and report the real format. Never write BREP/IGES
+  // bytes into a .step-named file (which would hand the user a mislabeled file).
+  if (!result) {
+    try {
+      console.log('STEP unavailable; writing native BREP (.brep) fallback...')
+      const brepPath = filePath.replace(/\.step$/i, '.brep')
+      let ok = false
+      if (oc.BRepTools.Write_3) {
+        try {
+          ok = oc.BRepTools.Write_3(cleanShape, brepPath, new oc.Message_ProgressRange_1())
+        } catch (e) {
+          console.log('  BRepTools.Write_3 failed:', e.message)
+        }
+      }
+      if (ok) {
+        console.log('Wrote native BREP fallback (file is BREP format, not STEP)')
+        result = { format: 'brep', path: brepPath, approach: 'fallback: native BREP' }
+      }
+    } catch (e) {
+      console.warn('BREP fallback failed:', e.message)
+    }
+  }
+
+  if (!result && oc.IGESControl_Writer_1) {
+    try {
+      console.log('STEP unavailable; writing IGES (.iges) fallback...')
+      const igesPath = filePath.replace(/\.step$/i, '.iges')
+      oc.IGESControl_Controller.Init()
+      const igesWriter = new oc.IGESControl_Writer_1()
+      igesWriter.AddShape(cleanShape, new oc.Message_ProgressRange_1())
+      igesWriter.ComputeModel()
+      const igesStatus = igesWriter.Write_2(igesPath, new oc.Message_ProgressRange_1())
+      if (igesStatus) {
+        console.log('Wrote IGES fallback (file is IGES format, not STEP)')
+        result = { format: 'iges', path: igesPath, approach: 'fallback: IGES' }
+      }
+    } catch (e) {
+      console.warn('IGES fallback failed:', e.message)
+    }
+  }
+
+  if (!result) {
+    console.error('All STEP export approaches failed')
+    throw new Error('STEP_EXPORT_FAILED')
+  }
+
+  return result
 }
 
 // ============================================================================
@@ -2286,7 +2232,7 @@ async function handleConvert(data) {
 
   // Write output
   let actualFormat = outputFormat
-  let ext = outputFormat === 'stl' ? 'stl' : 'step'
+  let ext = outputFormat === 'stl' ? 'stl' : (outputFormat === 'brep' ? 'brep' : 'step')
   let outputPath = `/output.${ext}`
   let outputData
 
@@ -2309,25 +2255,34 @@ async function handleConvert(data) {
     }
   }
 
+  let readPath = outputPath
   try {
-    writeOutput(oc, finalShape, actualFormat, outputPath)
+    const writeResult = writeOutput(oc, finalShape, actualFormat, outputPath)
+    actualFormat = writeResult.format
+    readPath = writeResult.path
+
+    // Surface honest fallbacks to the user (e.g. requested STEP, got .brep).
+    if (writeResult.format !== outputFormat) {
+      allRepairs.push(`Requested ${outputFormat.toUpperCase()} but exported ${writeResult.format.toUpperCase()} (${writeResult.approach || 'fallback'})`)
+    } else if (writeResult.wireframe) {
+      allRepairs.push('STEP exported as wireframe only (no solid faces)')
+    }
 
     // Read the output file
-    const stat = oc.FS.stat(outputPath)
-    console.log('Output file size:', stat.size, 'bytes')
-    outputData = oc.FS.readFile(outputPath)
+    const stat = oc.FS.stat(readPath)
+    console.log('Output file size:', stat.size, 'bytes (format ' + actualFormat + ')')
+    outputData = oc.FS.readFile(readPath)
     console.log('Read', outputData.length, 'bytes from output file')
   } catch (writeError) {
     console.warn('Primary export failed:', writeError.message)
 
-    // If STEP export failed, fall back to STL
-    if (actualFormat === 'step' && writeError.message === 'STEP_EXPORT_FAILED') {
+    // If STEP export failed entirely, fall back to STL
+    if ((actualFormat === 'step' || outputFormat === 'step') && writeError.message === 'STEP_EXPORT_FAILED') {
       console.log('Falling back to STL export...')
       postProgress('STEP export failed, falling back to STL...')
 
-      actualFormat = 'stl'
       ext = 'stl'
-      outputPath = `/output.${ext}`
+      readPath = `/output.${ext}`
 
       // For STL, we need to mesh the geometry first
       postProgress('Meshing geometry for STL export...')
@@ -2344,11 +2299,13 @@ async function handleConvert(data) {
         console.warn('Meshing failed:', meshErr.message)
       }
 
-      writeOutput(oc, finalShape, actualFormat, outputPath)
+      const writeResult = writeOutput(oc, finalShape, 'stl', readPath)
+      actualFormat = writeResult.format
+      readPath = writeResult.path
 
-      const stat = oc.FS.stat(outputPath)
+      const stat = oc.FS.stat(readPath)
       console.log('STL fallback output file size:', stat.size, 'bytes')
-      outputData = oc.FS.readFile(outputPath)
+      outputData = oc.FS.readFile(readPath)
 
       allRepairs.push('STEP export failed, exported as STL instead')
     } else {
@@ -2358,7 +2315,7 @@ async function handleConvert(data) {
 
   // Cleanup
   try {
-    oc.FS.unlink(outputPath)
+    oc.FS.unlink(readPath)
   } catch (unlinkError) {
     console.warn('Failed to cleanup output file:', unlinkError.message)
   }

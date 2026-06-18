@@ -8,7 +8,7 @@ type ConversionStatus = 'idle' | 'loading-occt' | 'converting' | 'analyzing' | '
 interface ConversionResult {
   blob: Blob | null
   fileName: string
-  format: 'step' | 'stl'
+  format: 'step' | 'stl' | 'brep' | 'iges'
   error?: string
 }
 
@@ -144,7 +144,7 @@ export default function App() {
   const [repairs, setRepairs] = useState<string[]>([])
 
   // Conversion options
-  const [outputFormat, setOutputFormat] = useState<'step' | 'stl'>('step')
+  const [outputFormat, setOutputFormat] = useState<'step' | 'stl' | 'brep'>('step')
   const [tolerance, setTolerance] = useState(0.1)
   const [repair, setRepair] = useState(true)
   const [mergeFaces, setMergeFaces] = useState(true)
@@ -233,7 +233,13 @@ export default function App() {
         (repairLog) => setRepairs(repairLog),
       )
 
-      const mimeType = conversionResult.format === 'step' ? 'application/step' : 'model/stl'
+      const mimeMap: Record<string, string> = {
+        step: 'application/step',
+        stl: 'model/stl',
+        brep: 'application/octet-stream',
+        iges: 'model/iges',
+      }
+      const mimeType = mimeMap[conversionResult.format] || 'application/octet-stream'
       const blob = new Blob([new Uint8Array(conversionResult.data).buffer as ArrayBuffer], { type: mimeType })
       const baseName = fileName.replace(/\.(stl|3mf|f3d)$/i, '')
 
@@ -447,6 +453,17 @@ export default function App() {
                     }`}
                   >
                     STL
+                  </button>
+                  <button
+                    onClick={() => setOutputFormat('brep')}
+                    title="Native OpenCascade B-rep (.brep)"
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                      outputFormat === 'brep'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                  >
+                    BREP
                   </button>
                 </div>
               </div>

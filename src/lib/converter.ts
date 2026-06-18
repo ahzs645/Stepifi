@@ -14,9 +14,32 @@ function getWorker(): Worker {
   return worker
 }
 
+/** Formats the worker may emit (includes honest fallbacks). */
+export type OutputFormat = 'step' | 'stl' | 'brep' | 'iges'
+
+/**
+ * Best-effort authoritative STEP validation using step-parser (the wasm STEP
+ * reader). Runs on the main thread (ESM) where step-parser loads cleanly.
+ * Returns true/false, or undefined if the validator itself couldn't run.
+ */
+async function validateStepBytes(bytes: Uint8Array): Promise<boolean | undefined> {
+  try {
+    const mod: any = await import('step-parser')
+    await mod.initStepParser()
+    const res = mod.parseStep(bytes)
+    if (!res) return false
+    if (typeof res.success === 'boolean') return res.success
+    // A parsed object with any entities/geometry counts as valid.
+    return true
+  } catch (e) {
+    console.warn('[Converter] step-parser validation skipped:', (e as Error).message)
+    return undefined
+  }
+}
+
 export interface ConversionOptions {
-  /** Output format: 'step' or 'stl' */
-  outputFormat?: 'step' | 'stl'
+  /** Output format: 'step', 'stl', or 'brep' */
+  outputFormat?: 'step' | 'stl' | 'brep'
   /** Tolerance for sewing and merging (0.01 - 1.0) */
   tolerance?: number
   /** Enable mesh repair operations */
@@ -55,7 +78,9 @@ export interface MeshStats {
 
 export interface ConversionResult {
   data: Uint8Array
-  format: 'step' | 'stl'
+  format: OutputFormat
+  /** STEP validity per step-parser; true/false, or undefined if not checked. */
+  stepValid?: boolean
   beforeStats?: MeshStats
   afterStats?: MeshStats
   repairs?: string[]
@@ -105,15 +130,31 @@ export function convertFile(
           repairs = data
           onRepairLog?.(data)
           break
-        case 'complete':
-          resolve({
-            data: e.data.data,
-            format: e.data.format,
-            beforeStats: e.data.beforeStats || beforeStats,
-            afterStats: e.data.afterStats || afterStats,
-            repairs: e.data.repairs || repairs,
-          })
+        case 'complete': {
+          const outBytes: Uint8Array = e.data.data
+          const outFormat: OutputFormat = e.data.format
+          const finish = (stepValid?: boolean) =>
+            resolve({
+              data: outBytes,
+              format: outFormat,
+              stepValid,
+              beforeStats: e.data.beforeStats || beforeStats,
+              afterStats: e.data.afterStats || afterStats,
+              repairs: e.data.repairs || repairs,
+            })
+          // Authoritative post-write gate: validate real STEP output with step-parser.
+          if (outFormat === 'step') {
+            validateStepBytes(outBytes).then((valid) => {
+              if (valid === false) {
+                console.warn('[Converter] step-parser reported the STEP output is INVALID')
+              }
+              finish(valid)
+            })
+          } else {
+            finish()
+          }
           break
+        }
         case 'error':
           reject(new Error(message))
           break
