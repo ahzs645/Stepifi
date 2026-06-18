@@ -1,7 +1,7 @@
 /**
  * ACIS Parser Bundle
  * Auto-generated from acis-js modules
- * Generated: 2026-06-18T14:05:43.847Z
+ * Generated: 2026-06-18T18:26:44.528Z
  *
  * For use with Web Workers via importScripts()
  */
@@ -1977,7 +1977,12 @@ class AcisChunkPosition extends AcisChunk {
     const [x, o1] = getFloat64(data, offset)
     const [y, o2] = getFloat64(data, o1)
     const [z, o3] = getFloat64(data, o2)
-    this.val = { x: x * this.scale, y: y * this.scale, z: z * this.scale }
+    // Store RAW coordinates. The model length-scale is applied once by
+    // getLocation() at read time. Pre-scaling here as well double-scaled every
+    // position (×scale²) while vector chunks (e.g. an ellipse major-axis) were
+    // only scaled once — making circles 10x smaller than their own vertices and
+    // the whole model 10x too large.
+    this.val = { x, y, z }
     this.value = this.val
     return o3
   }
@@ -4761,7 +4766,11 @@ class SurfaceCone extends Surface {
     // Python format: center axis major ratio range sine cosine scale sense urange vrange
     ;[this.center, i] = getLocation(chunks, i)
     ;[this.axis, i] = getVector(chunks, i)
-    ;[this.major, i] = getVector(chunks, i)  // Direction vector, not scalar
+    // The major axis is a radius vector — its LENGTH is the reference radius, so
+    // it must be length-scaled (getLocation), not read raw. getVector left every
+    // cone/cylinder radius 10x too small (the model scale), so the surface never
+    // matched its own bounding circles.
+    ;[this.major, i] = getLocation(chunks, i)
     ;[this.ratio, i] = getFloat(chunks, i)
     ;[this.range, i] = getInterval(chunks, i, MIN_INF, MAX_INF, getScale())
     ;[this.sine, i] = getFloat(chunks, i)
@@ -9281,17 +9290,24 @@ function convertACISSurface(oc, surfaceEntity) {
     if (typeName.includes('plane')) {
       return createPlaneSurface(oc, surfaceEntity.origin, surfaceEntity.normal)
     } else if (typeName.includes('cone')) {
-      // Get semi-angle from sine/cosine (ACIS stores these instead of angle)
+      // Get semi-angle from sine/cosine (ACIS stores these instead of angle).
+      // OpenCascade needs a semi-angle in (0, pi/2); the SIGN of the cosine tells
+      // which way the cone opens. A negative cosine means the radius grows toward
+      // -axis, so flip the axis and keep the angle positive.
       const sine = surfaceEntity.sine || 0
       const cosine = surfaceEntity.cosine || 1
       const semiAngle = Math.atan2(Math.abs(sine), Math.abs(cosine))
 
-      // Get radius from major vector length
+      // Get radius from major vector length (now correctly length-scaled)
       const major = surfaceEntity.major || { x: 1, y: 0, z: 0 }
       const radius = Math.sqrt(major.x * major.x + major.y * major.y + major.z * major.z) || 1.0
 
+      // Flip the axis direction when the cone opens toward -axis (cosine < 0).
+      const rawAxis = surfaceEntity.axis || { x: 0, y: 0, z: 1 }
+      const axis = cosine < 0 ? { x: -rawAxis.x, y: -rawAxis.y, z: -rawAxis.z } : rawAxis
+
       // Create axis system - use major as reference direction
-      const ax3 = makeAx3(oc, surfaceEntity.center, surfaceEntity.axis, major)
+      const ax3 = makeAx3(oc, surfaceEntity.center, axis, major)
 
       // If semi-angle is very small (sine ≈ 0), it's a cylinder
       if (Math.abs(sine) < 1e-6) {
@@ -9378,135 +9394,293 @@ function convertACISCurve(oc, curveEntity, startPt, endPt) {
   }
 }
 
+// ============================================================================
+// Conversion context: shared vertices + shared edges
+// ----------------------------------------------------------------------------
+// ACIS stores topology with shared vertex/edge records (two adjacent faces
+// reference the SAME edge, which references the SAME end vertices). The old
+// converter rebuilt every edge from fresh gp_Pnt points, destroying that
+// sharing — so BRepBuilderAPI_MakeWire could not stitch a face's edges into a
+// closed loop, and faces of a body never sewed into a solid.
+//
+// A ConvCtx fixes this for the span of one body:
+//   - vertices: quantized-coordinate -> shared TopoDS_Vertex (coincident edge
+//     endpoints resolve to the SAME vertex, so wires close).
+//   - edges:    ACIS edge record index -> shared forward TopoDS_Edge (both
+//     coedges of adjacent faces reuse one edge, so sewing yields a solid).
+// ============================================================================
+
+/** Vertex coincidence tolerance (mm). ACIS shares vertex records, so coincident
+ *  endpoints carry identical coordinates and quantize to the same key. */
+const VERTEX_TOL = 1e-6
+
+function createConvCtx() {
+  return { vertices: new Map(), edges: new Map(), vtol: VERTEX_TOL, modelBox: null }
+}
+
 /**
- * Convert ACIS edge to OpenCascade edge
+ * Per-axis bbox {min:[x,y,z], max:[x,y,z]} of all vertex coordinates referenced
+ * by a shell's edges — the TRUE per-axis extent of the shell's topology. Used to
+ * reject malformed faces: a correctly-trimmed face cannot extend past the
+ * vertices that bound it on ANY axis. (A diagonal test is blind here — a face
+ * escaping 50% on one axis barely changes the diagonal.)
  */
-function convertACISEdge(oc, edgeEntity) {
-  if (!edgeEntity) return null
-
+function shellVertexBox(shellEntity) {
+  const min = [Infinity, Infinity, Infinity]
+  const max = [-Infinity, -Infinity, -Infinity]
+  let n = 0
+  const add = (p) => {
+    if (!p) return
+    const c = p.point ? p.point : p
+    if (c.x == null) return
+    const v = [c.x, c.y, c.z]
+    for (let i = 0; i < 3; i++) {
+      if (v[i] < min[i]) min[i] = v[i]
+      if (v[i] > max[i]) max[i] = v[i]
+    }
+    n++
+  }
   try {
-    const curveEntity = edgeEntity.getCurve ? edgeEntity.getCurve() : null
-    const startPt = edgeEntity.getStart ? edgeEntity.getStart() : null
-    const endPt = edgeEntity.getEnd ? edgeEntity.getEnd() : null
-
-    // Get start/end points from vertices (getStart/getEnd return point coords directly)
-    const startVertex = startPt && startPt.point ? startPt.point : startPt
-    const endVertex = endPt && endPt.point ? endPt.point : endPt
-
-    // For straight lines with valid endpoints, use simple point-to-point edge
-    if (startVertex && endVertex) {
-      const p1 = makePoint(oc, startVertex)
-      const p2 = makePoint(oc, endVertex)
-
-      // Check for degenerate edge
-      const dx = (endVertex.x || 0) - (startVertex.x || 0)
-      const dy = (endVertex.y || 0) - (startVertex.y || 0)
-      const dz = (endVertex.z || 0) - (startVertex.z || 0)
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-      if (dist < 1e-6) return null
-
-      // Try curve-based edge first for non-straight curves
-      const typeName = curveEntity && curveEntity.getType ? curveEntity.getType() : ''
-
-      if (typeName && !typeName.includes('straight')) {
-        // For splines/ellipses, try to use the curve
-        const curve = convertACISCurve(oc, curveEntity, startVertex, endVertex)
-        if (curve) {
-          try {
-            const handleCurve = new oc.Handle_Geom_Curve_2(curve)
-            // BRepBuilderAPI_MakeEdge_20 takes just the curve handle
-            const builder = new oc.BRepBuilderAPI_MakeEdge_20(handleCurve)
-            if (builder.IsDone()) {
-              const edge = builder.Edge()
-              if (edgeEntity.sense === 'reversed') edge.Reverse()
-              return edge
-            }
-          } catch (e) {
-            // Fall through to point-based edge
+    const faces = shellEntity.getFaces ? shellEntity.getFaces() : []
+    for (const fa of faces) {
+      for (const lo of (fa.getLoops ? fa.getLoops() : [])) {
+        for (const ce of (lo.getCoedges ? lo.getCoedges() : [])) {
+          const e = ce.getEdge ? ce.getEdge() : null
+          if (e) {
+            add(e.getStart ? e.getStart() : null)
+            add(e.getEnd ? e.getEnd() : null)
           }
         }
       }
-
-      // For straight lines or fallback: use BRepBuilderAPI_MakeEdge_3(gp_Pnt, gp_Pnt)
-      try {
-        const builder = new oc.BRepBuilderAPI_MakeEdge_3(p1, p2)
-        if (builder.IsDone()) {
-          const edge = builder.Edge()
-          if (edgeEntity.sense === 'reversed') edge.Reverse()
-          return edge
-        }
-      } catch (e) {
-        console.warn('Point-based edge failed:', e.message)
-      }
     }
+  } catch (e) { /* fall through */ }
+  return n > 0 ? { min, max } : null
+}
 
-    // No valid endpoints - try curve only
-    const curve = convertACISCurve(oc, curveEntity, startVertex, endVertex)
-    if (curve) {
-      try {
-        const handleCurve = new oc.Handle_Geom_Curve_2(curve)
-        const builder = new oc.BRepBuilderAPI_MakeEdge_20(handleCurve)
-        if (builder.IsDone()) {
-          const edge = builder.Edge()
-          if (edgeEntity.sense === 'reversed') edge.Reverse()
-          return edge
-        }
-      } catch (e) {
-        console.warn('Curve-based edge failed:', e.message)
-      }
-    }
+/**
+ * Per-axis bbox {min, max} of an OCC shape, or null.
+ */
+function shapeBox(oc, shape) {
+  try {
+    const bb = new oc.Bnd_Box_1()
+    oc.BRepBndLib.Add(shape, bb, false)
+    if (bb.IsVoid()) return null
+    const a = { current: 0 }, b = { current: 0 }, c = { current: 0 }
+    const d = { current: 0 }, e = { current: 0 }, f = { current: 0 }
+    bb.Get(a, b, c, d, e, f)
+    return { min: [a.current, b.current, c.current], max: [d.current, e.current, f.current] }
   } catch (e) {
-    console.warn('Failed to convert edge:', e.message)
+    return null
+  }
+}
+
+/**
+ * Is a face geometrically valid (BRepCheck)? This is the authoritative accept
+ * test for a reconstructed face — it checks pcurves, wire closure/orientation,
+ * surface/curve consistency, etc.
+ */
+function isFaceValid(oc, face) {
+  if (!face) return false
+  try {
+    if (face.IsNull && face.IsNull()) return false
+  } catch (e) { /* ignore */ }
+  try {
+    const analyzer = new oc.BRepCheck_Analyzer(face, true)
+    return analyzer.IsValid()
+  } catch (e) {
+    return false
+  }
+}
+
+/**
+ * Gross-escape backstop: reject a face whose per-axis bbox blows far past the
+ * shell's true vertex extent. With correct geometry this rarely triggers; it
+ * only guards against a wildly untrimmed parametric patch slipping through.
+ * Uses generous slack (50%) so valid analytic faces are never rejected.
+ */
+function faceWithinModelBox(oc, face, ctx) {
+  if (!face) return false
+  const mb = ctx && ctx.modelBox
+  if (!mb) return true
+  const fb = shapeBox(oc, face)
+  if (!fb) return false
+  const maxExt = Math.max(mb.max[0] - mb.min[0], mb.max[1] - mb.min[1], mb.max[2] - mb.min[2])
+  const axisTol = Math.max(1e-3, maxExt * 0.5)
+  for (let i = 0; i < 3; i++) {
+    if (fb.min[i] < mb.min[i] - axisTol || fb.max[i] > mb.max[i] + axisTol) return false
+  }
+  return true
+}
+
+function vertexKey(coord, vtol) {
+  const s = 1 / vtol
+  return Math.round((coord.x || 0) * s) + '|' +
+         Math.round((coord.y || 0) * s) + '|' +
+         Math.round((coord.z || 0) * s)
+}
+
+function getSharedVertex(ctx, oc, coord) {
+  const key = vertexKey(coord, ctx.vtol)
+  const existing = ctx.vertices.get(key)
+  if (existing) return existing
+  const v = new oc.BRepBuilderAPI_MakeVertex(makePoint(oc, coord)).Vertex()
+  ctx.vertices.set(key, v)
+  return v
+}
+
+function coordDist(a, b) {
+  const dx = (a.x || 0) - (b.x || 0)
+  const dy = (a.y || 0) - (b.y || 0)
+  const dz = (a.z || 0) - (b.z || 0)
+  return Math.sqrt(dx * dx + dy * dy + dz * dz)
+}
+
+/**
+ * Build a single forward TopoDS_Edge (start -> end along its curve) using shared
+ * vertices. Orientation for loop traversal is applied later by the coedge.
+ */
+function buildEdgeForward(oc, edgeEntity, ctx) {
+  const curveEntity = edgeEntity.getCurve ? edgeEntity.getCurve() : null
+  let startCoord = edgeEntity.getStart ? edgeEntity.getStart() : null
+  let endCoord = edgeEntity.getEnd ? edgeEntity.getEnd() : null
+  // getStart/getEnd may return a {x,y,z} coord or a vertex-like with .point
+  if (startCoord && startCoord.point) startCoord = startCoord.point
+  if (endCoord && endCoord.point) endCoord = endCoord.point
+  const typeName = curveEntity && curveEntity.getType ? curveEntity.getType() : ''
+  const isStraight = !typeName || typeName.includes('straight')
+  const haveEnds = !!(startCoord && endCoord)
+
+  const v1 = haveEnds ? getSharedVertex(ctx, oc, startCoord) : null
+  const v2 = haveEnds ? getSharedVertex(ctx, oc, endCoord) : null
+  const closed = haveEnds && coordDist(startCoord, endCoord) < ctx.vtol
+
+  // Straight edge between shared vertices
+  if (isStraight && haveEnds) {
+    if (closed) return null // degenerate
+    try {
+      const b = new oc.BRepBuilderAPI_MakeEdge_2(v1, v2)
+      if (b.IsDone()) return b.Edge()
+    } catch (e) { /* fall through */ }
+    return null
+  }
+
+  // Curved edge (circle/ellipse/spline): build the geom curve, then trim it to
+  // the shared end vertices using the edge's stored parameter range when present.
+  const curve = convertACISCurve(oc, curveEntity, startCoord, endCoord)
+  if (curve) {
+    const handleCurve = new oc.Handle_Geom_Curve_2(curve)
+    const p1 = typeof edgeEntity.parameter1 === 'number' && isFinite(edgeEntity.parameter1) ? edgeEntity.parameter1 : null
+    const p2 = typeof edgeEntity.parameter2 === 'number' && isFinite(edgeEntity.parameter2) ? edgeEntity.parameter2 : null
+    const haveParams = p1 !== null && p2 !== null && Math.abs(p2 - p1) > 1e-9
+    try {
+      if (haveEnds && !closed) {
+        // Open arc trimmed to its two distinct vertices.
+        if (haveParams) {
+          const b = new oc.BRepBuilderAPI_MakeEdge_29(handleCurve, v1, v2, p1, p2)
+          if (b.IsDone()) return b.Edge()
+        }
+        const b2 = new oc.BRepBuilderAPI_MakeEdge_27(handleCurve, v1, v2)
+        if (b2.IsDone()) return b2.Edge()
+      } else if (haveParams) {
+        // Closed / full circle with a known [p1,p2] (~2π) span.
+        if (haveEnds) {
+          const b = new oc.BRepBuilderAPI_MakeEdge_29(handleCurve, v1, v2, p1, p2)
+          if (b.IsDone()) return b.Edge()
+        }
+        const b2 = new oc.BRepBuilderAPI_MakeEdge_25(handleCurve, p1, p2)
+        if (b2.IsDone()) return b2.Edge()
+      } else {
+        // Whole closed curve (full period).
+        const b = new oc.BRepBuilderAPI_MakeEdge_24(handleCurve)
+        if (b.IsDone()) return b.Edge()
+      }
+    } catch (e) { /* fall through to straight fallback */ }
+  }
+
+  // Last resort: straight segment between the shared endpoints.
+  if (haveEnds && !closed) {
+    try {
+      const b = new oc.BRepBuilderAPI_MakeEdge_2(v1, v2)
+      if (b.IsDone()) return b.Edge()
+    } catch (e) { /* give up */ }
   }
   return null
 }
 
 /**
+ * Convert ACIS edge to OpenCascade edge, reusing one shared forward edge per
+ * ACIS edge record so adjacent faces share topology (required for sewing).
+ * Returns the FORWARD edge; callers apply coedge orientation via .Reversed().
+ */
+function convertACISEdge(oc, edgeEntity, ctx) {
+  if (!edgeEntity) return null
+  if (!ctx) ctx = createConvCtx()
+
+  try {
+    const idx = edgeEntity.index
+    if (idx != null && ctx.edges.has(idx)) return ctx.edges.get(idx)
+    const edge = buildEdgeForward(oc, edgeEntity, ctx)
+    if (idx != null) ctx.edges.set(idx, edge)
+    return edge
+  } catch (e) {
+    console.warn('Failed to convert edge:', e.message)
+    return null
+  }
+}
+
+/**
  * Convert ACIS loop to OpenCascade wire
  */
-function convertACISLoop(oc, loopEntity) {
+function convertACISLoop(oc, loopEntity, ctx) {
   if (!loopEntity) return null
+  if (!ctx) ctx = createConvCtx()
 
   try {
     const coedges = loopEntity.getCoedges ? loopEntity.getCoedges() : []
     if (coedges.length === 0) return null
 
+    // Add edges in coedge (loop) order. ACIS stores coedges already ordered
+    // around the loop, so sequential MakeWire.Add_1 follows the true topology;
+    // because endpoints now resolve to SHARED vertices, consecutive edges
+    // connect. (List-based assembly was tried but mis-connects at vertices where
+    // 3+ edges meet, producing zig-zag wires that span the whole body.)
     const wireBuilder = new oc.BRepBuilderAPI_MakeWire_1()
     let edgesAdded = 0
 
     for (const coedge of coedges) {
       const edgeEntity = coedge.getEdge ? coedge.getEdge() : null
-      const edge = convertACISEdge(oc, edgeEntity)
+      const baseEdge = convertACISEdge(oc, edgeEntity, ctx)
+      if (!baseEdge) continue
 
-      if (edge) {
-        // Apply coedge sense
-        if (coedge.sense === 'reversed') {
-          edge.Reverse()
-        }
+      // Apply coedge sense on a COPY (never mutate the shared cached edge).
+      let oriented = baseEdge
+      if (coedge.sense === 'reversed') {
         try {
-          wireBuilder.Add_1(edge)
-          edgesAdded++
+          oriented = oc.TopoDS.Edge_1(baseEdge.Reversed())
         } catch (e) {
-          // Edge might not connect - continue with other edges
+          oriented = baseEdge
         }
+      }
+      try {
+        wireBuilder.Add_1(oriented)
+        edgesAdded++
+      } catch (e) {
+        // Edge didn't connect to the growing wire — skip it.
       }
     }
 
-    // Wire needs at least one edge
     if (edgesAdded === 0) return null
 
     if (wireBuilder.IsDone()) {
       return wireBuilder.Wire()
-    } else {
-      // Try to get partial wire
-      try {
-        const wire = wireBuilder.Wire()
-        if (wire && !wire.IsNull()) {
-          return wire
-        }
-      } catch (e) {
-        // Ignore
-      }
+    }
+
+    // Partial wire (some edges may not have connected) — still usable for trim.
+    try {
+      const wire = wireBuilder.Wire()
+      if (wire && !wire.IsNull()) return wire
+    } catch (e) {
+      // Ignore
     }
   } catch (e) {
     console.warn('Failed to convert loop:', e.message)
@@ -9515,10 +9689,130 @@ function convertACISLoop(oc, loopEntity) {
 }
 
 /**
+ * Is a wire topologically closed? MakeWire sets the Closed flag when its edges
+ * form a closed loop. A face must be bounded by a closed wire; building one from
+ * an open/partial wire is the failure mode that produces spanning, malformed
+ * faces (MakeFace_21 is permissive enough to accept them, unlike MakeFace_8).
+ */
+function isWireClosed(oc, wire) {
+  try {
+    if (wire.Closed_1 && wire.Closed_1()) return true
+  } catch (e) { /* fall through */ }
+  try {
+    if (wire.Closed && wire.Closed()) return true
+  } catch (e) { /* fall through */ }
+  return false
+}
+
+/**
+ * Bounding-box diagonal of a shape (Infinity if void/failed).
+ */
+function bboxDiag(oc, shape) {
+  try {
+    const bb = new oc.Bnd_Box_1()
+    oc.BRepBndLib.Add(shape, bb, false)
+    if (bb.IsVoid()) return Infinity
+    const xMin = { current: 0 }, yMin = { current: 0 }, zMin = { current: 0 }
+    const xMax = { current: 0 }, yMax = { current: 0 }, zMax = { current: 0 }
+    bb.Get(xMin, yMin, zMin, xMax, yMax, zMax)
+    const dx = xMax.current - xMin.current, dy = yMax.current - yMin.current, dz = zMax.current - zMin.current
+    return Math.sqrt(dx * dx + dy * dy + dz * dz)
+  } catch (e) {
+    return Infinity
+  }
+}
+
+/**
+ * Repair a freshly-built face: add missing pcurves, fix the seam on periodic
+ * surfaces (cones/cylinders are periodic in U), and correct wire orientation.
+ * Returns the repaired face, or the original if ShapeFix is unavailable/fails.
+ */
+function fixFacePCurves(oc, face) {
+  if (!face) return face
+  try {
+    const fixer = new oc.ShapeFix_Face_2(face)
+    fixer.SetPrecision(1e-6)
+    fixer.SetMaxTolerance(1e-3)
+    fixer.Perform()
+    const fixed = fixer.Face()
+    if (fixed && !fixed.IsNull()) return fixed
+  } catch (e) {
+    // ShapeFix unavailable or failed — keep the original face
+  }
+  return face
+}
+
+/**
+ * Build a periodic cone/cylinder "band" face (a frustum/tube bounded by full
+ * circles at each end) from explicit UV bounds, so OpenCascade adds the seam
+ * natively. These faces (ACIS: a cone-surface with each loop a single full
+ * circle) CANNOT be built by wire-trimming a single circle — the surface
+ * escapes past the rim. We map each bounding circle to a surface V parameter by
+ * projecting a point of it onto the surface, then take the full U period.
+ * Returns the face, or null if this isn't a clean band case.
+ */
+function tryPeriodicBandFace(oc, surfaceEntity, handleSurface, faceEntity) {
+  const tname = surfaceEntity && surfaceEntity.getType ? surfaceEntity.getType() : ''
+  // ACIS 'cone-surface' covers both cones and cylinders (sine≈0).
+  if (!tname.includes('cone')) return null
+
+  const loops = faceEntity.getLoops ? faceEntity.getLoops() : []
+  if (loops.length < 2) return null // need two circular ends to bound a band
+
+  let sas
+  try {
+    sas = new oc.ShapeAnalysis_Surface(handleSurface)
+  } catch (e) {
+    return null
+  }
+
+  // Map each bounding circle to a surface V parameter by projecting a point of it.
+  const vs = []
+  for (const loop of loops) {
+    const coedges = loop.getCoedges ? loop.getCoedges() : []
+    if (coedges.length !== 1) return null // each end must be a single closed circle
+    const edge = coedges[0].getEdge ? coedges[0].getEdge() : null
+    const curve = edge && edge.getCurve ? edge.getCurve() : null
+    const ct = curve && curve.getType ? curve.getType() : ''
+    if (!ct.includes('ellipse')) return null
+    let sp = edge.getStart ? edge.getStart() : null
+    if (sp && sp.point) sp = sp.point
+    if (!sp) return null
+    try {
+      const uv = sas.ValueOfUV(makePoint(oc, sp), 1e-6)
+      vs.push(uv.Y())
+    } catch (e) {
+      return null
+    }
+  }
+  if (vs.length < 2) return null
+
+  const vMin = Math.min(...vs)
+  const vMax = Math.max(...vs)
+  if (!(vMax - vMin > 1e-6)) return null
+
+  try {
+    // Full U period + the V range between the two circles → the closed band.
+    // MakeFace_14 = (Handle_Geom_Surface, uMin, uMax, vMin, vMax, tolDegen).
+    const fb = new oc.BRepBuilderAPI_MakeFace_14(handleSurface, 0, 2 * Math.PI, vMin, vMax, 1e-6)
+    if (!fb.IsDone()) return null
+    const face = fixFacePCurves(oc, fb.Face())
+    if (face && !face.IsNull()) {
+      if (faceEntity.sense === 'reversed') face.Reverse()
+      return face
+    }
+  } catch (e) {
+    // fall through
+  }
+  return null
+}
+
+/**
  * Convert ACIS face to OpenCascade face
  */
-function convertACISFace(oc, faceEntity) {
+function convertACISFace(oc, faceEntity, ctx) {
   if (!faceEntity) return null
+  if (!ctx) ctx = createConvCtx()
 
   try {
     const surfaceEntity = faceEntity.getSurface ? faceEntity.getSurface() : null
@@ -9531,22 +9825,61 @@ function convertACISFace(oc, faceEntity) {
     const handleSurface = new oc.Handle_Geom_Surface_2(surface)
     const loops = faceEntity.getLoops ? faceEntity.getLoops() : []
 
-    if (loops.length > 0) {
-      const outerLoop = loops[0]
-      const outerWire = convertACISLoop(oc, outerLoop)
+    // Periodic cone/cylinder band (frustum/tube with circular ends): build from
+    // UV bounds with a native seam, never by wire-trimming a single circle.
+    // These are constructed directly from the (correct) bounding-circle V params,
+    // so they're trusted as-is — a bbox guard would wrongly reject them because
+    // BRepBndLib over-reports an analytic cone's extent toward its apex.
+    const band = tryPeriodicBandFace(oc, surfaceEntity, handleSurface, faceEntity)
+    if (band) {
+      return band
+    }
 
-      if (outerWire) {
+    if (loops.length > 0) {
+      const outerWire = convertACISLoop(oc, loops[0], ctx)
+
+      // Only build a face from a CLOSED boundary wire. Open/partial wires yield
+      // spanning, malformed faces (and never sew into a solid anyway).
+      if (outerWire && isWireClosed(oc, outerWire)) {
+        // Accept a built face when it does not grossly escape the shell's vertex
+        // extent. (The malformation that earlier needed tight bbox guards is now
+        // fixed at the parser level; per-face BRepCheck is too strict for
+        // reconstructed analytic faces and is left to the sewing stage.)
+        const accept = (face) => faceWithinModelBox(oc, face, ctx)
+
+        // Preferred: trim the surface with the wire. MakeFace_21 projects the
+        // wire's 3D edges onto the surface to build the pcurves that analytic
+        // curved faces (cone/cylinder/sphere/torus) need; ShapeFix then repairs
+        // any missing pcurve/seam. Only viable now that wires actually close.
         try {
-          // First create face from surface with tolerance
+          const faceBuilder = new oc.BRepBuilderAPI_MakeFace_21(handleSurface, outerWire, false)
+          for (let i = 1; i < loops.length; i++) {
+            const innerWire = convertACISLoop(oc, loops[i], ctx)
+            if (innerWire) {
+              innerWire.Reverse()
+              faceBuilder.Add(innerWire)
+            }
+          }
+          if (faceBuilder.IsDone()) {
+            const result = fixFacePCurves(oc, faceBuilder.Face())
+            if (accept(result)) {
+              if (faceEntity.sense === 'reversed') result.Reverse()
+              return result
+            }
+          }
+        } catch (e) {
+          // Fall through to the legacy surface-only trim
+        }
+
+        // Fallback: infinite face from surface, trimmed by adding the wire.
+        try {
           // BRepBuilderAPI_MakeFace_8 takes (Handle_Geom_Surface, tolerance)
           const faceBuilder = new oc.BRepBuilderAPI_MakeFace_8(handleSurface, 1e-6)
-
-          // Then add the outer wire
           faceBuilder.Add(outerWire)
 
           // Add inner wires (holes)
           for (let i = 1; i < loops.length; i++) {
-            const innerWire = convertACISLoop(oc, loops[i])
+            const innerWire = convertACISLoop(oc, loops[i], ctx)
             if (innerWire) {
               innerWire.Reverse()
               faceBuilder.Add(innerWire)
@@ -9554,9 +9887,11 @@ function convertACISFace(oc, faceEntity) {
           }
 
           if (faceBuilder.IsDone()) {
-            const result = faceBuilder.Face()
-            if (faceEntity.sense === 'reversed') result.Reverse()
-            return result
+            const result = fixFacePCurves(oc, faceBuilder.Face())
+            if (accept(result)) {
+              if (faceEntity.sense === 'reversed') result.Reverse()
+              return result
+            }
           }
         } catch (e) {
           // Wire-based face failed, try UV bounds approach
@@ -9602,11 +9937,14 @@ function convertACISFace(oc, faceEntity) {
           Math.abs(vMin) < MAX_PARAM && Math.abs(vMax) < MAX_PARAM &&
           uMax > uMin && vMax > vMin) {
         // BRepBuilderAPI_MakeFace_9 takes (Handle_Geom_Surface, umin, umax, vmin, vmax, tolerance)
-        const faceBuilder = new oc.BRepBuilderAPI_MakeFace_9(handleSurface, uMin, uMax, vMin, vMax, 1e-6)
+        const faceBuilder = new oc.BRepBuilderAPI_MakeFace_14(handleSurface, uMin, uMax, vMin, vMax, 1e-6)
         if (faceBuilder.IsDone()) {
           const result = faceBuilder.Face()
-          if (faceEntity.sense === 'reversed') result.Reverse()
-          return result
+          // This builds an untrimmed UV patch — accept only if it stays bounded.
+          if (faceWithinModelBox(oc, result, ctx)) {
+            if (faceEntity.sense === 'reversed') result.Reverse()
+            return result
+          }
         }
       }
     } catch (e) {
@@ -9637,30 +9975,16 @@ function convertACISShell(oc, shellEntity) {
     let faceCount = 0
     let skippedFaces = 0
     for (const faceEntity of faces) {
+      // Build each face with its OWN context (shared vertices/edges within the
+      // face only). Sharing across the whole shell accumulates vertex tolerance
+      // at high-valence corners and drops ~20% of faces; building faces
+      // independently and letting the sewing stage merge coincident edges keeps
+      // them all. convertACISFace already validates and bounds each face.
       const face = convertACISFace(oc, faceEntity)
       if (face) {
-        // Validate face bounding box before adding
         try {
-          const bndBox = new oc.Bnd_Box_1()
-          oc.BRepBndLib.Add(face, bndBox, false)
-
-          if (!bndBox.IsVoid()) {
-            const xMin = { current: 0 }, yMin = { current: 0 }, zMin = { current: 0 }
-            const xMax = { current: 0 }, yMax = { current: 0 }, zMax = { current: 0 }
-            bndBox.Get(xMin, yMin, zMin, xMax, yMax, zMax)
-
-            const MAX_EXTENT = 1e10
-            if (Math.abs(xMin.current) < MAX_EXTENT && Math.abs(xMax.current) < MAX_EXTENT &&
-                Math.abs(yMin.current) < MAX_EXTENT && Math.abs(yMax.current) < MAX_EXTENT &&
-                Math.abs(zMin.current) < MAX_EXTENT && Math.abs(zMax.current) < MAX_EXTENT) {
-              shellBuilder.Add(shell, face)
-              faceCount++
-            } else {
-              skippedFaces++
-            }
-          } else {
-            skippedFaces++
-          }
+          shellBuilder.Add(shell, face)
+          faceCount++
         } catch (e) {
           skippedFaces++
         }
@@ -9680,58 +10004,53 @@ function convertACISShell(oc, shellEntity) {
  * Try to create a solid from a shell
  */
 function tryMakeSolid(oc, shell) {
-  // First try to sew the shell to ensure it's closed
+  let working = shell
+
+  // Sew with a tolerance scaled to the part. Faces from different builders
+  // (a cone band's rim circle vs an adjacent plane's arc) are geometrically
+  // coincident but not the same edge object, so they only merge if the sewing
+  // tolerance is comfortably above their floating-point gap.
   try {
-    const sewing = new oc.BRepBuilderAPI_Sewing(1e-6, true, true, true, false)
+    const diag = bboxDiag(oc, shell)
+    const tol = (isFinite(diag) && diag > 0) ? Math.max(1e-4, diag * 1e-3) : 1e-3
+    const sewing = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false)
     sewing.Add(shell)
     sewing.Perform(new oc.Message_ProgressRange_1())
-    const sewedShape = sewing.SewedShape()
-
-    // Check if we got a solid directly from sewing
-    const solidExplorer = new oc.TopExp_Explorer_2(
-      sewedShape,
-      oc.TopAbs_ShapeEnum.TopAbs_SOLID,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-    if (solidExplorer.More()) {
-      return oc.TopoDS.Solid_1(solidExplorer.Current())
-    }
-
-    // Try to extract shell from sewed shape and make solid
-    const shellExplorer = new oc.TopExp_Explorer_2(
-      sewedShape,
-      oc.TopAbs_ShapeEnum.TopAbs_SHELL,
-      oc.TopAbs_ShapeEnum.TopAbs_SHAPE
-    )
-    if (shellExplorer.More()) {
-      const sewedShell = oc.TopoDS.Shell_1(shellExplorer.Current())
-      try {
-        const solidBuilder = new oc.BRepBuilderAPI_MakeSolid_2(sewedShell)
-        if (solidBuilder.IsDone()) {
-          return solidBuilder.Solid()
-        }
-      } catch (e) {
-        // MakeSolid failed, return the sewed shell
-        return sewedShell
-      }
-    }
-
-    return sewedShape
+    working = sewing.SewedShape()
   } catch (e) {
-    // Sewing failed, try direct MakeSolid
+    // keep the unsewn shell
   }
 
-  // Direct MakeSolid attempt
+  // Already a solid?
   try {
-    const solidBuilder = new oc.BRepBuilderAPI_MakeSolid_2(shell)
-    if (solidBuilder.IsDone()) {
-      return solidBuilder.Solid()
-    }
-  } catch (e) {
-    // MakeSolid failed
-  }
+    const se = new oc.TopExp_Explorer_2(working, oc.TopAbs_ShapeEnum.TopAbs_SOLID, oc.TopAbs_ShapeEnum.TopAbs_SHAPE)
+    if (se.More()) return oc.TopoDS.Solid_1(se.Current())
+  } catch (e) { /* ignore */ }
 
-  return shell
+  // Promote a (closed) shell to a solid. ShapeFix_Solid orients shells/voids
+  // correctly; fall back to MakeSolid, then to returning the shell as-is.
+  try {
+    const she = new oc.TopExp_Explorer_2(working, oc.TopAbs_ShapeEnum.TopAbs_SHELL, oc.TopAbs_ShapeEnum.TopAbs_SHAPE)
+    if (she.More()) {
+      const sewedShell = oc.TopoDS.Shell_1(she.Current())
+      try {
+        const fixer = new oc.ShapeFix_Solid_1()
+        const solid = fixer.SolidFromShell(sewedShell)
+        if (solid && !solid.IsNull()) {
+          // Confirm it really became a solid (closed); else keep the shell.
+          const chk = new oc.TopExp_Explorer_2(solid, oc.TopAbs_ShapeEnum.TopAbs_SOLID, oc.TopAbs_ShapeEnum.TopAbs_SHAPE)
+          if (chk.More()) return solid
+        }
+      } catch (e) { /* ignore */ }
+      try {
+        const sb = new oc.BRepBuilderAPI_MakeSolid_2(sewedShell)
+        if (sb.IsDone()) return sb.Solid()
+      } catch (e) { /* ignore */ }
+      return sewedShell
+    }
+  } catch (e) { /* ignore */ }
+
+  return working
 }
 
 /**
@@ -9852,20 +10171,72 @@ function convertACISBodiesToShape(oc, bodies) {
     throw new Error('Failed to convert any ACIS bodies to geometry')
   }
 
-  if (shapes.length === 1) {
-    return shapes[0]
-  }
-
-  // Combine into compound
+  // Combine all per-body face groups, then sew coincident edges and promote the
+  // resulting closed shells to true B-rep solids.
   const builder = new oc.BRep_Builder()
   const compound = new oc.TopoDS_Compound()
   builder.MakeCompound(compound)
-
   for (const shape of shapes) {
     builder.Add(compound, shape)
   }
 
-  return compound
+  return sewAndSolidify(oc, compound)
+}
+
+/**
+ * Sew a face/shell soup so geometrically-coincident edges from independently
+ * built faces merge, then promote each closed shell to a TopoDS_Solid. Open
+ * shells are kept as shells. Returns a compound of solids + remaining shells.
+ */
+function sewAndSolidify(oc, shape) {
+  let sewn = shape
+  try {
+    // The ASM parse fragments one solid into many small "bodies"; their faces
+    // only share edges geometrically, so sew with a small absolute tolerance.
+    const sewing = new oc.BRepBuilderAPI_Sewing(1e-3, true, true, true, false)
+    sewing.Add(shape)
+    sewing.Perform(new oc.Message_ProgressRange_1())
+    sewn = sewing.SewedShape()
+  } catch (e) {
+    // keep the unsewn soup
+  }
+
+  const builder = new oc.BRep_Builder()
+  const out = new oc.TopoDS_Compound()
+  builder.MakeCompound(out)
+  let nSolids = 0, nShells = 0
+
+  try {
+    const she = new oc.TopExp_Explorer_2(sewn, oc.TopAbs_ShapeEnum.TopAbs_SHELL, oc.TopAbs_ShapeEnum.TopAbs_SHAPE)
+    while (she.More()) {
+      const shell = oc.TopoDS.Shell_1(she.Current())
+      let solidified = false
+      let closed = false
+      try { closed = shell.Closed_1 ? shell.Closed_1() : false } catch (e) { closed = false }
+      if (closed) {
+        try {
+          const fixer = new oc.ShapeFix_Solid_1()
+          const solid = fixer.SolidFromShell(shell)
+          if (solid && !solid.IsNull()) {
+            builder.Add(out, solid)
+            nSolids++
+            solidified = true
+          }
+        } catch (e) { /* fall back to shell */ }
+      }
+      if (!solidified) {
+        builder.Add(out, shell)
+        nShells++
+      }
+      she.Next()
+    }
+  } catch (e) {
+    return sewn
+  }
+
+  console.log(`  Assembled ${nSolids} solid(s) + ${nShells} open shell(s)`)
+  if (nSolids === 0 && nShells === 0) return sewn
+  return out
 }
 
 // ============================================================================

@@ -153,7 +153,11 @@ export class SurfaceCone extends Surface {
     // Python format: center axis major ratio range sine cosine scale sense urange vrange
     ;[this.center, i] = getLocation(chunks, i)
     ;[this.axis, i] = getVector(chunks, i)
-    ;[this.major, i] = getVector(chunks, i)  // Direction vector, not scalar
+    // The major axis is a radius vector — its LENGTH is the reference radius, so
+    // it must be length-scaled (getLocation), not read raw. getVector left every
+    // cone/cylinder radius 10x too small (the model scale), so the surface never
+    // matched its own bounding circles.
+    ;[this.major, i] = getLocation(chunks, i)
     ;[this.ratio, i] = getFloat(chunks, i)
     ;[this.range, i] = getInterval(chunks, i, MIN_INF, MAX_INF, getScale())
     ;[this.sine, i] = getFloat(chunks, i)

@@ -304,7 +304,12 @@ export class AcisChunkPosition extends AcisChunk {
     const [x, o1] = getFloat64(data, offset)
     const [y, o2] = getFloat64(data, o1)
     const [z, o3] = getFloat64(data, o2)
-    this.val = { x: x * this.scale, y: y * this.scale, z: z * this.scale }
+    // Store RAW coordinates. The model length-scale is applied once by
+    // getLocation() at read time. Pre-scaling here as well double-scaled every
+    // position (×scale²) while vector chunks (e.g. an ellipse major-axis) were
+    // only scaled once — making circles 10x smaller than their own vertices and
+    // the whole model 10x too large.
+    this.val = { x, y, z }
     this.value = this.val
     return o3
   }

@@ -121,17 +121,8 @@ async function main() {
     bbox: before.boundingBox && before.boundingBox.size
   }))
 
-  // Light sewing (mirror worker.js tolerance*5 with tolerance=0.1)
-  let finalShape = shape
-  try {
-    const sewing = new oc.BRepBuilderAPI_Sewing(0.5, true, true, true, false)
-    sewing.Add(shape)
-    sewing.Perform(new oc.Message_ProgressRange_1())
-    finalShape = sewing.SewedShape()
-    console.log('Sewed F3D geometry.')
-  } catch (e) {
-    console.warn('Sewing failed, using raw shape:', e.message)
-  }
+  // convertACISBodiesToShape already sews + solidifies; use the shape directly.
+  const finalShape = shape
 
   // Write STEP via production writeOutput
   const outPath = '/output.step'

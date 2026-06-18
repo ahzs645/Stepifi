@@ -1,7 +1,7 @@
 /**
  * Web Worker for OpenCascade.js v2 STL/3MF/F3D to STEP/STL conversion
  * Auto-generated from converter-js modules
- * Generated: 2026-06-18T14:06:15.394Z
+ * Generated: 2026-06-18T18:26:44.625Z
  *
  * Features: mesh repair, face merging, multi-mesh support, tolerance control,
  *           large mesh optimization, JavaScript mesh repairs, fallback strategies,
@@ -2092,21 +2092,11 @@ async function handleConvert(data) {
     beforeStats.note = 'F3D B-rep geometry (direct conversion)'
     self.postMessage({ type: 'beforeStats', data: beforeStats })
 
-    // For F3D files, skip heavy processing since ACIS geometry is already valid B-rep
-    // Only do light sewing to ensure watertight topology
-    postProgress('Sewing F3D geometry...')
-    try {
-      const sewing = new oc.BRepBuilderAPI_Sewing(tolerance * 5, true, true, true, false)
-      sewing.Add(shape)
-      sewing.Perform(new oc.Message_ProgressRange_1())
-      const sewedShape = sewing.SewedShape()
-      shapes.push(sewedShape)
-      allRepairs.push('Sewed F3D geometry')
-    } catch (sewErr) {
-      console.warn('F3D sewing failed, using original shape:', sewErr.message)
-      shapes.push(shape)
-      allRepairs.push('Using original F3D geometry (sewing skipped)')
-    }
+    // convertACISBodiesToShape already sews coincident edges and promotes closed
+    // shells to solids — use its result directly. Re-sewing here would decompose
+    // those solids back into a face soup.
+    shapes.push(shape)
+    allRepairs.push('Reconstructed B-rep from F3D ACIS geometry')
 
   } else if (is3MF) {
     // Parse 3MF file
